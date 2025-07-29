@@ -56,6 +56,7 @@ use x86_64::VirtAddr;
 use x86_64::structures::gdt::SegmentSelector;
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{Page, PageTableFlags, Size4KiB};
+use crate::capabilities::capability::Capability;
 
 /// kernel & user stack of a thread
 struct Stacks {
@@ -89,6 +90,7 @@ pub struct Thread {
     id: usize,
     stacks: Mutex<Stacks>,
     process: Arc<Process>, // reference to my process
+    // TODO cspace: 
     /// for user threads: the address to jump to
     user_kickoff: VirtAddr,
     /// the actual entry point (eg. for user threads the single parameter to kickoff)
