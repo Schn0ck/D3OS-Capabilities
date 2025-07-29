@@ -43,6 +43,8 @@ use crate::process::process::Process;
 use crate::process::scheduler;
 use crate::syscall::syscall_dispatcher::CORE_LOCAL_STORAGE_TSS_RSP0_PTR_INDEX;
 use crate::{process_manager, scheduler, tss};
+use crate::capabilities::capability::Capability;
+use crate::capabilities::cspace::CSpace;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::naked_asm;
@@ -56,7 +58,7 @@ use x86_64::VirtAddr;
 use x86_64::structures::gdt::SegmentSelector;
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{Page, PageTableFlags, Size4KiB};
-use crate::capabilities::capability::Capability;
+use crate::memory::heap::KernelAllocator;
 
 /// kernel & user stack of a thread
 struct Stacks {
@@ -90,7 +92,7 @@ pub struct Thread {
     id: usize,
     stacks: Mutex<Stacks>,
     process: Arc<Process>, // reference to my process
-    // TODO cspace: 
+    cspace: Capability<CSpace>, // capability to the CSpace
     /// for user threads: the address to jump to
     user_kickoff: VirtAddr,
     /// the actual entry point (eg. for user threads the single parameter to kickoff)
@@ -149,6 +151,7 @@ impl Thread {
                 .read()
                 .kernel_process()
                 .expect("Trying to create a kernel thread before process initialization!"),
+            cspace: Capability::null(), // TODO: create CSpace for kernel thread, (copy process CSpace)
             user_kickoff: VirtAddr::zero(),
             entry,
         };
@@ -400,6 +403,7 @@ impl Thread {
             id: tid,
             stacks: Mutex::new(Stacks::new(kernel_stack, user_stack)),
             process: parent,
+            cspace: Capability::null(),//TODO: create CSpace for user thread, (copy process CSpace)
             user_kickoff: kickoff_addr,
             entry,
         };
