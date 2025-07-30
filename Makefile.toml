@@ -1,3 +1,7 @@
+[config]
+skip_core_tasks = true
+skip_git_env_info = true
+
 [env]
 BOOTLOADER_DIRECTORY = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/loader"
 INITRD_DIRECTORY = "${BOOTLOADER_DIRECTORY}/initrd"
@@ -117,7 +121,7 @@ condition = { files_not_exist = [ "${INITRD_DIRECTORY}" ] }
 [tasks.initrd]
 cwd = "${INITRD_DIRECTORY}"
 command = "${TAR}"
-args = [ "-cf", "${BOOTLOADER_DIRECTORY}/initrd.tar", "about", "hello", "helloc", "shell", "uptime", "date", "ntest", "heaptest", "ls" ]
+args = [ "-cf", "${BOOTLOADER_DIRECTORY}/initrd.tar", "about", "hello", "helloc", "shell", "uptime", "date", "ntest", "heaptest", "threadtest", "ls" ]
 dependencies = [ "link-members" ]
 condition = { files_modified = { input = [ "${INITRD_DIRECTORY}/*" ], output = [ "${BOOTLOADER_DIRECTORY}/initrd.tar" ] } }
 
