@@ -34,7 +34,7 @@ impl<T> Capability<T> {
         self.flags.contains(flags)
     }
 
-    fn invoke(&self) -> Option<spin::MutexGuard<'_, T>> {
+    pub fn invoke(&self) -> Option<MutexGuard<'_, T>> {
         if self.has_permissions(CapabilityFlags::READ) {
             self.obj.as_ref().map(|arc| arc.lock())
         } else {
@@ -42,7 +42,7 @@ impl<T> Capability<T> {
         }
     }
 
-    fn invoke_mut(&mut self) -> Option<spin::MutexGuard<'_, T>> {
+    pub fn invoke_mut(&mut self) -> Option<spin::MutexGuard<'_, T>> {
         if self.has_permissions(CapabilityFlags::READ | CapabilityFlags::WRITE) {
             self.obj.as_ref().map(|arc| arc.lock())
         } else {
@@ -76,7 +76,7 @@ impl<T> Capability<T> {
         }
 
         let new_cap = self.obj.as_ref().map(|arc| Capability {
-            obj: Some(Arc::clone(arc)), //only clone the Arc, not the inner object 
+            obj: Some(Arc::clone(arc)), //only clone the Arc, not the inner object
             flags: new_flags,
         });
 
@@ -86,7 +86,7 @@ impl<T> Capability<T> {
 
         new_cap
     }
-    
+
     pub fn revoke(&mut self) {
         self.obj = None;
         self.flags = CapabilityFlags::empty();

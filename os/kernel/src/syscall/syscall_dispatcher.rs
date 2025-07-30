@@ -15,19 +15,32 @@ use x86_64::registers::control::{Efer, EferFlags};
 use x86_64::registers::model_specific::{KernelGsBase, LStar, Star};
 use x86_64::structures::gdt::SegmentSelector;
 use x86_64::{PrivilegeLevel, VirtAddr};
-use crate::syscall::sys_vmem::sys_map_memory;
-use crate::syscall::sys_time::{sys_get_date, sys_get_system_time, sys_set_date, };
-use crate::syscall::sys_concurrent::{sys_process_execute_binary, sys_process_exit, sys_process_id, sys_thread_create, sys_thread_exit,
-    sys_thread_id, sys_thread_join, sys_thread_sleep, sys_thread_switch};
-use crate::syscall::sys_terminal::{sys_terminal_read, sys_terminal_write};
-use crate::syscall::sys_naming::*;
 
-use crate::{core_local_storage, tss};
 use log::info;
+use crate::{core_local_storage, scheduler, tss};
 
 
 pub const CORE_LOCAL_STORAGE_TSS_RSP0_PTR_INDEX: u64 = 0x00;
 pub const CORE_LOCAL_STORAGE_USER_RSP_INDEX: u64 = 0x08;
+
+pub struct Syscall {
+    function_pointer: *const (),
+}
+
+impl Syscall {
+    pub fn new(function_pointer: *const ()) -> Self {
+        Self { function_pointer }
+    }
+
+    pub fn function_pointer(&self) -> *const () {
+        self.function_pointer
+    }
+}
+
+unsafe impl Send for Syscall {}
+unsafe impl Sync for Syscall {}
+
+
 
 #[repr(C, packed)]
 pub struct CoreLocalStorage {
@@ -74,51 +87,6 @@ pub fn init() {
         ptr::from_ref(core_local_storage.deref()) as u64
     ));
 }
-
-#[unsafe(no_mangle)]
-pub static SYSCALL_TABLE: SyscallTable = SyscallTable::new();
-
-#[repr(C, align(64))]
-pub struct SyscallTable {
-    handle: [*const usize; NUM_SYSCALLS],
-}
-
-impl SyscallTable {
-    pub const fn new() -> Self {
-        SyscallTable {
-            handle: [
-                sys_terminal_read as *const _,
-                sys_terminal_write as *const _,
-                sys_map_memory as *const _,
-                sys_process_execute_binary as *const _,
-                sys_process_id as *const _,
-                sys_process_exit as *const _,
-                sys_thread_create as *const _,
-                sys_thread_id as *const _,
-                sys_thread_switch as *const _,
-                sys_thread_sleep as *const _,
-                sys_thread_join as *const _,
-                sys_thread_exit as *const _,
-                sys_get_system_time as *const _,
-                sys_get_date as *const _,
-                sys_set_date as *const _,
-                sys_open as *const _,
-                sys_read as *const _,
-                sys_write as *const _,
-                sys_seek as *const _,
-                sys_close as *const _,
-                sys_mkdir as *const _,
-                sys_touch as *const _,
-                sys_readdir as *const _,
-                sys_cwd as *const _,
-                sys_cd as *const _,                
-            ],
-        }
-    }
-}
-
-unsafe impl Send for SyscallTable {}
-unsafe impl Sync for SyscallTable {}
 
 #[unsafe(naked)]
 ///
@@ -169,8 +137,26 @@ unsafe extern "C" fn syscall_handler() {
     "cmp rax, {NUM_SYSCALLS}",
     "jge syscall_abort", // Panics and does not return
 
-    // Call system call handler, corresponding to ID (in rax)
+    // Get and check capability, save the parameters as rust might overwrite them
+    "push rdi",
+    "push rsi",
+    "push rdx",
+    "push rcx",
+    "push r8",
+    "push r9",
+
+    "call get_capability_entry",
+
+    "pop r9",
+    "pop r8",
+    "pop rcx",
+    "pop rdx",
+    "pop rsi",
+    "pop rdi",
+
+    // Call system call handler through capability
     "call syscall_disp",
+
 
     // Restore registers
     "pop r15",
@@ -200,18 +186,48 @@ unsafe extern "C" fn syscall_handler() {
     );
 }
 
+#[unsafe(no_mangle)]
+unsafe extern "C" fn get_capability_entry() -> *const usize {
+    let syscall_number: u64;
+    unsafe{asm!("mov {}, rax", out(reg) syscall_number);}
+
+    // Get current thread's CSpace through scheduler
+    let current_thread = scheduler().current_thread();
+
+    // Check capability and return function pointer if allowed
+    if let Some(cspace) = current_thread.cspace.invoke() {
+        if let Some(syscall_cap) = cspace.get_syscall_capability(syscall_number as usize) {
+            if let Some(syscall) = syscall_cap.invoke(){
+                // Get the syscall function pointer from the capability
+                let pointer = syscall.function_pointer();
+
+                // Check if the syscall function pointer is valid
+                if !pointer.is_null() {
+                    // Store the function pointer in rax for syscall_disp to call
+                    unsafe {asm!("mov rax, {}", in(reg) pointer);}
+                    return 0 as *const usize;
+                }
+            }
+        }
+    }
+
+    // If we get here, something went wrong
+    unsafe {syscall_abort()}
+}
+
+
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
 unsafe extern "C" fn syscall_disp() {
     naked_asm!(
-    "call [{SYSCALL_TABLE} + 8 * rax]",
-    "ret",
-    SYSCALL_TABLE = sym SYSCALL_TABLE
+        "call rax", // Call the function pointer that was put in rax by get_capability_entry
+        "ret",
     );
 }
 
+#[cold]
 #[unsafe(no_mangle)]
-unsafe extern "C" fn syscall_abort() {
+unsafe extern "C" fn syscall_abort() -> *const usize {
     let syscall_number: u64;
 
     unsafe {
@@ -220,5 +236,5 @@ unsafe extern "C" fn syscall_abort() {
         );
     }
 
-    panic!("System call with id [{}] does not exist!", syscall_number);
+    panic!("System call with id [{}] does not exist or insufficient capabilities!", syscall_number);
 }
