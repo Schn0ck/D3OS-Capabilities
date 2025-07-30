@@ -130,7 +130,7 @@ impl Thread {
                 .read()
                 .kernel_process()
                 .expect("Trying to create a kernel thread before process initialization!"),
-            cspace: Capability::null(), // TODO: create CSpace for kernel thread
+            cspace: Capability::new(CSpace::new(), CapabilityFlags::READ | CapabilityFlags::WRITE | CapabilityFlags::SHARE),
             user_kickoff: VirtAddr::zero(),
             entry,
         };
