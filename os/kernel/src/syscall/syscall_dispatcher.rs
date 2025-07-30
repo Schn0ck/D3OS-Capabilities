@@ -15,32 +15,19 @@ use x86_64::registers::control::{Efer, EferFlags};
 use x86_64::registers::model_specific::{KernelGsBase, LStar, Star};
 use x86_64::structures::gdt::SegmentSelector;
 use x86_64::{PrivilegeLevel, VirtAddr};
+use crate::syscall::sys_vmem::sys_map_memory;
+use crate::syscall::sys_time::{sys_get_date, sys_get_system_time, sys_set_date, };
+use crate::syscall::sys_concurrent::{sys_process_execute_binary, sys_process_exit, sys_process_id, sys_thread_create, sys_thread_exit,
+                                     sys_thread_id, sys_thread_join, sys_thread_sleep, sys_thread_switch};
+use crate::syscall::sys_terminal::{sys_terminal_read, sys_terminal_write};
+use crate::syscall::sys_naming::*;
 
-use log::info;
 use crate::{core_local_storage, scheduler, tss};
+use log::info;
 
 
 pub const CORE_LOCAL_STORAGE_TSS_RSP0_PTR_INDEX: u64 = 0x00;
 pub const CORE_LOCAL_STORAGE_USER_RSP_INDEX: u64 = 0x08;
-
-pub struct Syscall {
-    function_pointer: *const (),
-}
-
-impl Syscall {
-    pub fn new(function_pointer: *const ()) -> Self {
-        Self { function_pointer }
-    }
-
-    pub fn function_pointer(&self) -> *const () {
-        self.function_pointer
-    }
-}
-
-unsafe impl Send for Syscall {}
-unsafe impl Sync for Syscall {}
-
-
 
 #[repr(C, packed)]
 pub struct CoreLocalStorage {
@@ -94,7 +81,7 @@ pub fn init() {
 ///    This function does not take any parameters per its declaration,
 ///    but in reality, it takes at least the system call ID in rax
 ///    and may take additional parameters for the system call in `rdi`, `rsi` ... \
-///    See AMD64 ABI. 
+///    See AMD64 ABI.
 ///
 /// Return: \
 ///    Two values in `rax`, `rdx` to reconstruct `Result`in user mode
@@ -115,7 +102,7 @@ unsafe extern "C" fn syscall_handler() {
     // Store registers (except rax, which is used for system call ID and return value)
     "push rbx",
     "push rcx", // Contains rip for returning to ring 3
-    "push rdx", 
+    "push rdx",
     "push rdi",
     "push rsi",
     "push r8",
@@ -137,26 +124,39 @@ unsafe extern "C" fn syscall_handler() {
     "cmp rax, {NUM_SYSCALLS}",
     "jge syscall_abort", // Panics and does not return
 
-    // Get and check capability, save the parameters as rust might overwrite them
+    //Save all Registers again because get_capability_entry would overwrite them
+    "push rbx",
+    "push rcx", // Contains rip for returning to ring 3
+    "push rdx",
     "push rdi",
     "push rsi",
-    "push rdx",
-    "push rcx",
     "push r8",
     "push r9",
+    "push r10",
+    "push r11", // Contains eflags for returning to ring 3
+    "push r12",
+    "push r13",
+    "push r14",
+    "push r15",
 
-    "call get_capability_entry",
+    "call get_capability_entry", // Write Syscall Function Address from Corresponding Capability to stack
 
+    //Restore registers to use them in the syscall function
+    "pop r15",
+    "pop r14",
+    "pop r13",
+    "pop r12",
+    "pop r11", // Contains eflags for returning to ring 3
+    "pop r10",
     "pop r9",
     "pop r8",
-    "pop rcx",
-    "pop rdx",
     "pop rsi",
     "pop rdi",
+    "pop rdx",
+    "pop rcx", // Contains rip for returning to ring 3
+    "pop rbx",
 
-    // Call system call handler through capability
-    "call syscall_disp",
-
+    "call rax", // Call system call function pointer
 
     // Restore registers
     "pop r15",
@@ -187,7 +187,7 @@ unsafe extern "C" fn syscall_handler() {
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn get_capability_entry() -> *const usize {
+unsafe extern "C" fn get_capability_entry() -> *const () {
     let syscall_number: u64;
     unsafe{asm!("mov {}, rax", out(reg) syscall_number);}
 
@@ -204,30 +204,18 @@ unsafe extern "C" fn get_capability_entry() -> *const usize {
                 // Check if the syscall function pointer is valid
                 if !pointer.is_null() {
                     // Store the function pointer in rax for syscall_disp to call
-                    unsafe {asm!("mov rax, {}", in(reg) pointer);}
-                    return 0 as *const usize;
+                    return pointer;
                 }
             }
         }
     }
 
     // If we get here, something went wrong
-    unsafe {syscall_abort()}
+    panic!("Capability for syscall with id [{}] does not exist or has no permission!", syscall_number);
 }
 
-
-#[unsafe(naked)]
 #[unsafe(no_mangle)]
-unsafe extern "C" fn syscall_disp() {
-    naked_asm!(
-        "call rax", // Call the function pointer that was put in rax by get_capability_entry
-        "ret",
-    );
-}
-
-#[cold]
-#[unsafe(no_mangle)]
-unsafe extern "C" fn syscall_abort() -> *const usize {
+unsafe extern "C" fn syscall_abort() {
     let syscall_number: u64;
 
     unsafe {
@@ -236,5 +224,5 @@ unsafe extern "C" fn syscall_abort() -> *const usize {
         );
     }
 
-    panic!("System call with id [{}] does not exist or insufficient capabilities!", syscall_number);
+    panic!("System call with id [{}] does not exist!", syscall_number);
 }
