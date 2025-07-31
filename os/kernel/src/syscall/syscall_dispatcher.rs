@@ -24,7 +24,7 @@ use crate::syscall::sys_naming::*;
 
 use crate::{core_local_storage, scheduler, tss};
 use log::info;
-
+use crate::capabilities::capability::CapabilityFlags;
 
 pub const CORE_LOCAL_STORAGE_TSS_RSP0_PTR_INDEX: u64 = 0x00;
 pub const CORE_LOCAL_STORAGE_USER_RSP_INDEX: u64 = 0x08;
@@ -197,7 +197,7 @@ unsafe extern "C" fn get_capability_entry() -> *const () {
     // Check capability and return function pointer if allowed
     if let Some(cspace) = current_thread.cspace.invoke() {
         if let Some(syscall_cap) = cspace.get_syscall_capability(syscall_number as usize) {
-            if let Some(syscall) = syscall_cap.invoke(){
+            if syscall_cap.has_permissions(CapabilityFlags::EXECUTE) && let Some(syscall) = syscall_cap.invoke(){
                 // Get the syscall function pointer from the capability
                 let pointer = syscall.function_pointer();
 

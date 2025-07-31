@@ -61,7 +61,7 @@ impl<T> Capability<T> {
         }
 
         self.obj.as_ref().map(|arc| Capability {
-            obj: Some(Arc::clone(arc)), //only clone the Arc, not the inner object
+            obj: Some(Arc::clone(arc)), 
             flags: new_flags,
         })
     }
@@ -76,7 +76,7 @@ impl<T> Capability<T> {
         }
 
         let new_cap = self.obj.as_ref().map(|arc| Capability {
-            obj: Some(Arc::clone(arc)), //only clone the Arc, not the inner object
+            obj: Some(Arc::clone(arc)), 
             flags: new_flags,
         });
 
@@ -117,6 +117,10 @@ impl<T> Capability<T> {
 
     pub fn null() -> Self {
         Self { obj: None, flags: CapabilityFlags::empty()}
+    }
+    
+    pub fn syscall(obj: T) -> Self {
+        Self::new(obj, CapabilityFlags::READ | CapabilityFlags::EXECUTE | CapabilityFlags::SHARE)
     }
 }
 

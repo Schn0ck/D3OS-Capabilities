@@ -49,7 +49,7 @@ impl CSpace {
 
         let mut syscall_capabilities: Vec<_> = syscall_fns
             .iter()
-            .map(|&f| Capability::readonly(Syscall::new(f)))
+            .map(|&f| Capability::syscall(Syscall::new(f)))
             .collect();
 
         /*        // Example of revoking a specific syscall capability
