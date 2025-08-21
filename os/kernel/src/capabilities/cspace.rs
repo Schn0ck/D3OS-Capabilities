@@ -9,11 +9,12 @@ use crate::syscall::sys_naming::*;
 use crate::syscall::sys_terminal::*;
 use crate::syscall::sys_time::*;
 use crate::syscall::sys_vmem::*;
+use crate::syscall::sys_caps::*;
 
 pub struct CSpace {
     syscall_capabilities: Vec<Capability<Syscall>>,
-    //memory_capabilities: Vec<Capability<>>,
     //ipc_capabilities: Vec<Capability<>>,
+    //driver_capabilities: Vec<Capability<>>,
     //... other capability types
 }
 
@@ -45,54 +46,82 @@ impl CSpace {
             sys_readdir as *const (),
             sys_cwd as *const (),
             sys_cd as *const (),
+            sys_share_syscall_cap as *const (),
+            sys_revoke_syscall_cap as *const (),
         ];
-
+        
+        
+        let mut num = 0;
         let mut syscall_capabilities: Vec<_> = syscall_fns
             .iter()
-            .map(|&f| Capability::syscall(Syscall::new(f)))
+            .map(|&f| {
+                let cap = Capability::syscall(Syscall::new(num, f));
+                num += 1;
+                cap
+            })
             .collect();
 
-        /*        // Example of revoking a specific syscall capability
-        if let Some(mut cap) = syscall_capabilities.get_mut(13) {
-            cap.revoke();
+             // Example of revoking a specific syscall capability
+         if let Some(mut cap) = syscall_capabilities.get_mut(13) {
+            //cap.revoke();
         }
-        */
+        
         
         Self {
             syscall_capabilities ,
             //memory_capabilities: Vec::new(),
             //ipc_capabilities: Vec::new(),
+            //driver_capabilities: Vec::new(),
             //... initialize other capability types
         }
     }
     
     //TODO implement methods to add, remove, and manage capabilities
-    pub fn add_syscall_capability(&mut self, capability: Capability<Syscall>) {
-        self.syscall_capabilities.push(capability);
+    pub fn receive_syscall_capability(&mut self, capability: Option<Capability<Syscall>>, syscall_num: usize) -> bool{
+        if let Some(capability) = capability {
+            if let Some(cap) = self.syscall_capabilities.get_mut(syscall_num) {
+                cap.add_permissions(capability.get_permissions())
+            } else {
+                self.syscall_capabilities[syscall_num] = capability;
+                
+            }
+            return true;
+        }
+        
+        false
     }
-    pub fn get_syscall_capability(&self, index: usize) -> Option<&Capability<Syscall>> {
-        self.syscall_capabilities.get(index)
+    
+    pub fn revoke_syscall_capability(&mut self, syscall_num: usize){
+        if let Some(cap) = self.syscall_capabilities.get_mut(syscall_num) {
+            cap.revoke();
+        }
     }
-    pub fn get_syscall_capability_mut(&mut self, index: usize) -> Option<&mut Capability<Syscall>> {
-        self.syscall_capabilities.get_mut(index)
+    pub fn get_syscall_capability(&self, syscall_num: usize) -> Option<&Capability<Syscall>> {
+        self.syscall_capabilities.get(syscall_num)
     }
-    pub fn remove_syscall_capability(&mut self, index: usize) -> Capability<Syscall> {
-        self.syscall_capabilities.remove(index)
+    pub fn get_syscall_capability_mut(&mut self, syscall_num: usize) -> Option<&mut Capability<Syscall>> {
+        self.syscall_capabilities.get_mut(syscall_num)
+    }
+    pub fn remove_syscall_capability(&mut self, syscall_num: usize) -> Capability<Syscall> {
+        self.syscall_capabilities.remove(syscall_num)
     }
 }
 
 pub struct Syscall {
+    number: usize,
     function: *const (),
 }
 
 impl Syscall {
-    pub fn new(function: *const ()) -> Self {
-        Self { function }
+    pub fn new(number: usize, function: *const ()) -> Self {
+        Self { number, function }
     }
 
     pub fn function_pointer(&self) -> *const () {
         self.function
     }
+    
+    pub fn number(&self) -> usize {self.number}
 }
 
 

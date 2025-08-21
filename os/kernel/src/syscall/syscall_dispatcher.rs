@@ -23,7 +23,7 @@ use crate::syscall::sys_terminal::{sys_terminal_read, sys_terminal_write};
 use crate::syscall::sys_naming::*;
 
 use crate::{core_local_storage, scheduler, tss};
-use log::info;
+use log::{error, info};
 use crate::capabilities::capability::CapabilityFlags;
 
 pub const CORE_LOCAL_STORAGE_TSS_RSP0_PTR_INDEX: u64 = 0x00;
@@ -211,7 +211,9 @@ unsafe extern "C" fn get_capability_entry() -> *const () {
     }
 
     // If we get here, something went wrong
-    panic!("Capability for syscall with id [{}] does not exist or has no permission!", syscall_number);
+    error!("System call with id [{}] does not exist or caller has no permission!", syscall_number);
+    permission_denied() as *const ()
+    //panic!("Capability for syscall with id [{}] does not exist or has no permission!", syscall_number);
 }
 
 #[unsafe(no_mangle)]
@@ -225,4 +227,9 @@ unsafe extern "C" fn syscall_abort() {
     }
 
     panic!("System call with id [{}] does not exist!", syscall_number);
+}
+
+#[unsafe(no_mangle)]
+extern "sysv64" fn permission_denied() -> isize {
+    -5 // NO_PERMISSION error code
 }

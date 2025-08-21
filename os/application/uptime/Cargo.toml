@@ -13,3 +13,5 @@ path = "src/uptime.rs"
 runtime = { path = "../../library/runtime" }
 terminal = { path = "../../library/terminal" }
 time = { path = "../../library/time" }
+capabilities = { path = "../../library/capabilities" }
+concurrent = { path = "../../library/concurrent" }

@@ -34,6 +34,10 @@ impl<T> Capability<T> {
         self.flags.contains(flags)
     }
 
+    pub fn get_permissions(&self) -> CapabilityFlags {
+        self.flags
+    }
+
     pub fn invoke(&self) -> Option<MutexGuard<'_, T>> {
         if self.has_permissions(CapabilityFlags::READ) {
             self.obj.as_ref().map(|arc| arc.lock())
@@ -85,6 +89,10 @@ impl<T> Capability<T> {
         }
 
         new_cap
+    }
+    
+    pub fn add_permissions(&mut self, flags: CapabilityFlags) {
+        self.flags.insert(flags);
     }
 
     pub fn revoke(&mut self) {

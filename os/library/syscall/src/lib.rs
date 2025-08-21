@@ -42,6 +42,8 @@ pub enum SystemCall {
     Readdir,
     Cwd,
     Cd,
+    ShareSyscallCap,
+    RevokeSyscallCap,
     // no syscall, just marking last number, see NUM_SYSCALLS
     // insert any new system calls before this marker
     LastEntryMarker,
