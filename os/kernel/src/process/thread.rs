@@ -130,7 +130,7 @@ impl Thread {
                 .read()
                 .kernel_process()
                 .expect("Trying to create a kernel thread before process initialization!"),
-            cspace: Capability::new(CSpace::new(), CapabilityFlags::READ | CapabilityFlags::WRITE | CapabilityFlags::SHARE), //TODO: necessary? Seems to call Syscalls?
+            cspace: Capability::new(CSpace::new(), CapabilityFlags::READ | CapabilityFlags::WRITE | CapabilityFlags::SHARE),
             user_kickoff: VirtAddr::zero(),
             entry,
         };

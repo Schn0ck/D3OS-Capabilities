@@ -2,6 +2,7 @@
 
 
 use alloc::vec::Vec;
+use log::info;
 use syscall::NUM_SYSCALLS;
 use crate::capabilities::capability::Capability;
 use crate::syscall::sys_concurrent::*;
@@ -65,7 +66,6 @@ impl CSpace {
          if let Some(mut cap) = syscall_capabilities.get_mut(13) {
             //cap.revoke();
         }
-        
         
         Self {
             syscall_capabilities ,
