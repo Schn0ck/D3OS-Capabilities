@@ -27,6 +27,7 @@ pub fn main() {
      */
 
     let id = thread::start_application("date", vec![]).expect("Failed to start date application").id();
+    thread::sleep(100);
     revoke(id, 13);
     println!("revoked");
 }
