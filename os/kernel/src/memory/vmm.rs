@@ -35,14 +35,14 @@
    ║   - pfr_from_pr_identity      get pfr range from page range identity    ║
    ╟─────────────────────────────────────────────────────────────────────────╢
    ║ Author: Fabian Ruhland and Michael Schoettner                           ║
-   ║         Univ. Duesseldorf, 20.07.2025                                   ║
+   ║         Univ. Duesseldorf, 7.8.2025                                     ║
    ╚═════════════════════════════════════════════════════════════════════════╝
 */
 
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::ops::Range;
-use log::{warn, info, debug, trace};
+use log::{warn, info};
 use spin::RwLock;
 
 use x86_64::PhysAddr;
@@ -177,7 +177,7 @@ impl VirtualAddressSpace {
 
     /// Map `frame_range` for the full page range of the given `vma`. \
     /// The mapping will use the given `flags` for the page table entries.
-    pub fn map_pfr_for_vma(&self, vma: &VirtualMemoryArea, frame_range: PhysFrameRange, mut flags: PageTableFlags) -> Result<(), i64> {
+    pub fn map_pfr_for_vma(&self, vma: &VirtualMemoryArea, frame_range: PhysFrameRange, flags: PageTableFlags) -> Result<(), i64> {
         self.map_pfr_for_partial_vma(vma, frame_range, vma.range, flags)
     }
 
@@ -190,7 +190,7 @@ impl VirtualAddressSpace {
         let num_frames = frame_range.end - frame_range.start;
         let num_pages = page_range.end - page_range.start;
         if num_frames != num_pages {
-            warn!("Can't map {} frames into VMA with {} pages!", num_frames, num_pages);
+            warn!("Can't map {num_frames} frames into VMA with {num_pages} pages!");
             return Err(-1);
         }
 
@@ -347,7 +347,7 @@ impl VirtualAddressSpace {
     pub fn kernel_map_devm_identity(&self, start_phys_addr: u64, end_phys_addr: u64, flags: PageTableFlags, typ: VmaType, tag: &str) -> Page {
         assert!(end_phys_addr > start_phys_addr, "'end_phys_addr' must be larger than 'start_phys_addr'");
 
-        // Calc page frame range (nneded for mapping))
+        // Calc page frame range (needed for mapping))
         let start_page_frame = frames::frame_from_u64(start_phys_addr).expect("start_phys_addr is not page aligned");
         let end_page_frame = frames::frame_from_u64(Self::align_up(end_phys_addr)).expect("end_phys_addr is not page aligned");
         let pfr = PhysFrameRange {
@@ -365,6 +365,11 @@ impl VirtualAddressSpace {
         let vma = self
             .alloc_vma(Some(start_page_addr), pr.len() as u64, MemorySpace::Kernel, typ, tag)
             .expect("alloc_vma failed");
+
+        // Remove frames from allocator, so frames are not allocated again
+        if let Err(e) = frames::remove_dev_mem(start_phys_addr, pfr.len() as usize) {
+            panic!("Failed to remove device memory frames: {}", e);
+        }
 
         // Now we do the mapping
         self.map_pfr_for_vma(&vma, pfr, flags).expect("map_pfr_for_vma failed in map_devmem_identity");
@@ -399,11 +404,7 @@ impl VirtualAddressSpace {
     /// Frames are allocated for *all* pages in the vma including all mappings in the page tables. \
     /// Returns the new [`VirtualMemoryArea`] if successful, otherwise `None`.
     pub fn user_alloc_map_full(&self, start_page: Option<Page>, num_pages: u64, vma_type: VmaType, vma_tag: &str) -> Option<Arc<VirtualMemoryArea>> {
-        let vma = self.alloc_vma(start_page, num_pages, MemorySpace::User, vma_type, vma_tag);
-        if vma.is_none() {
-            return None;
-        }
-        let vma = vma.unwrap();
+        let vma = self.alloc_vma(start_page, num_pages, MemorySpace::User, vma_type, vma_tag)?;
 
         self.page_tables.map(
             vma.range,
@@ -422,11 +423,7 @@ impl VirtualAddressSpace {
         &self, start_page: Option<Page>, num_pages: u64, vma_type: VmaType, vma_tag: &str, alloc_num_pages: u64, alloc_downwards: bool,
     ) -> Option<Arc<VirtualMemoryArea>> {
         // Alloc vma
-        let vma = self.alloc_vma(start_page, num_pages, MemorySpace::User, vma_type, vma_tag);
-        if vma.is_none() {
-            return None;
-        }
-        let vma = vma.unwrap();
+        let vma = self.alloc_vma(start_page, num_pages, MemorySpace::User, vma_type, vma_tag)?;
 
         // Calc page range to be physically allocated
         let alloc_page_range;
@@ -533,7 +530,9 @@ impl VirtualAddressSpace {
 impl Drop for VirtualAddressSpace {
     fn drop(&mut self) {
         for vma in self.virtual_memory_areas.read().iter() {
-            self.page_tables.unmap(vma.1.range, true);
+            if vma.1.typ != VmaType::DeviceMemory {
+                self.page_tables.unmap(vma.1.range, true);
+            }
         }
     }
 }

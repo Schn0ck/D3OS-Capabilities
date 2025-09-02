@@ -3,7 +3,7 @@
    ╟─────────────────────────────────────────────────────────────────────────╢
    ║ Descr.: All system calls for the naming service.                        ║
    ╟─────────────────────────────────────────────────────────────────────────╢
-   ║ Author: Michael Schoettner, 28.12.2024, HHU                             ║
+   ║ Author: Michael Schoettner, 25.08.2025, HHU                             ║
    ╚═════════════════════════════════════════════════════════════════════════╝
 */
 use alloc::slice;
@@ -60,8 +60,12 @@ pub unsafe extern "sysv64" fn sys_touch(path: *const u8) -> isize {
     return_vals::convert_syscall_result_to_ret_code(api::touch(&unsafe { ptr_to_string(path).unwrap() }))
 }
 
+pub unsafe extern "sysv64" fn sys_mkfifo(path: *const u8) -> isize {
+    return_vals::convert_syscall_result_to_ret_code(api::mkfifo(&unsafe { ptr_to_string(path).unwrap() }))
+}
+
 /// Convert a raw pointer resulting from a CString to a UTF-8 String
-unsafe fn ptr_to_string(ptr: *const u8) -> Result<String, Errno> {
+pub(super) unsafe fn ptr_to_string(ptr: *const u8) -> Result<String, Errno> {
     if ptr.is_null() {
         return Err(Errno::EBADSTR);
     }

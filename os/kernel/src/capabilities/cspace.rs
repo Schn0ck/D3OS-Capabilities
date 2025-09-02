@@ -11,6 +11,7 @@ use crate::syscall::sys_terminal::*;
 use crate::syscall::sys_time::*;
 use crate::syscall::sys_vmem::*;
 use crate::syscall::sys_caps::*;
+use crate::syscall::sys_net::*;
 
 pub struct CSpace {
     syscall_capabilities: Vec<Capability<Syscall>>,
@@ -23,6 +24,7 @@ impl CSpace {
     pub fn new() -> Self {
         let syscall_fns: [*const (); NUM_SYSCALLS] = [
             sys_terminal_read as *const (),
+            sys_terminal_read_nb as *const (),
             sys_terminal_write as *const (),
             sys_map_memory as *const (),
             sys_process_execute_binary as *const (),
@@ -47,10 +49,20 @@ impl CSpace {
             sys_readdir as *const (),
             sys_cwd as *const (),
             sys_cd as *const (),
+            sys_sock_open as *const (),
+            sys_sock_bind as *const (),
+            sys_sock_accept as *const (),
+            sys_sock_connect as *const (),
+            sys_sock_send as *const (),
+            sys_sock_receive as *const (),
+            sys_sock_close as *const (),
+            sys_get_ip_adresses as *const (),
+            sys_mkfifo as *const (),
+            //caps
             sys_share_syscall_cap as *const (),
             sys_revoke_syscall_cap as *const (),
+            sys_map_frame_buffer as *const (),
         ];
-        
         
         let mut num = 0;
         let mut syscall_capabilities: Vec<_> = syscall_fns

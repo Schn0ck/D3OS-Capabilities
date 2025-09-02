@@ -1,219 +1,151 @@
 /* ╔═════════════════════════════════════════════════════════════════════════╗
    ║ Module: frames_lf                                                       ║
    ╟─────────────────────────────────────────────────────────────────────────╢
+   ║ This file is a wrapper for accessing the llfree library of Lars Wrenger.║
    ║                                                                         ║
-   ║ Functions for saving free memory regions during booting:                ║
-   ║   - add_free_region      add a free physical memory region              ║
-   ║   - add_reserved_region  reserve a free physical memory region          ║
+   ║ Functions for saving free and reserved memory regions during booting:   ║
+   ║   - boot_avail         insert free frame region detected during boot    ║
+   ║   - boot_reserve       reserve a range of frames during boot            ║
    ╟─────────────────────────────────────────────────────────────────────────╢
-   ║ Author: Fabian Ruhland, Univ. Duesseldorf, 24.5.2025                    ║
+   ║ Author: Fabian Ruhland, Univ. Duesseldorf, 21.8.2025                    ║
    ╚═════════════════════════════════════════════════════════════════════════╝
 */
-use core::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
+
+use alloc::alloc::alloc_zeroed;
+use core::alloc::Layout;
+use core::num;
+use core::num::NonZeroUsize;
 use log::info;
-use spin::Mutex;
 use x86_64::PhysAddr;
-use x86_64::structures::paging::{frame::PhysFrameRange, PhysFrame};
 use x86_64::structures::paging::Size4KiB;
+use x86_64::structures::paging::{PhysFrame, frame::PhysFrameRange};
+use spin::Once;
 
-use crate::memory::PAGE_SIZE;
+use crate::memory::{PAGE_SIZE, dram};
 
+use llfree::{Alloc, Init, LLFree, MetaData, Flags};
+
+static PAGE_FRAME_ALLOCATOR: Once<LLFree> = Once::new();
+
+/// Initialize the new page frame allocator.
+pub fn init() {
+    PAGE_FRAME_ALLOCATOR.call_once(|| {
+        let cores = 1;
+        let num_frames = dram::limit() as usize / PAGE_SIZE;
+
+        info!("Initializing new page frame allocator with {} frames", num_frames);
+
+        // Create meta data
+        let m = LLFree::metadata_size(cores, num_frames);
+        let local = aligned_buf(m.local);
+        let trees = aligned_buf(m.trees);
+        let meta = MetaData {
+            local,
+            trees,
+            lower: aligned_buf(m.lower),
+        };
+        info!("MetaData:");
+        info!("   local = {}", meta.local.len());
+        info!("   trees = {}", meta.trees.len());
+        info!("   lower = {}", meta.lower.len());
+
+        // Create allocator for frames
+        LLFree::new(cores, num_frames, Init::FreeAll, meta).unwrap()
+    });
+}
 
 /// Check if the page frame allocator is currently locked.
 pub fn allocator_locked() -> bool {
     false
 }
 
-
-static PHYS_LIMIT: AtomicU64 = AtomicU64::new(0);
-
-/// Get the highest physical address, managed by PAGE_FRAME_ALLOCATOR.
-pub fn phys_limit() -> PhysFrame {
-    let current_limit = PHYS_LIMIT.load(Ordering::SeqCst);
-    PhysFrame::from_start_address(PhysAddr::new(current_limit))
-        .expect("Physical limit is not aligned to page size")   
-}
-
 /// Helper function to convert a u64 address to a PhysFrame.
 /// The given address is aligned up to the page size (4 KiB).
-pub fn frame_from_u64(
-    addr: u64,
-) -> Result<PhysFrame<Size4KiB>, x86_64::structures::paging::page::AddressNotAligned> {
+pub fn frame_from_u64(addr: u64) -> Result<PhysFrame<Size4KiB>, x86_64::structures::paging::page::AddressNotAligned> {
     let pa = PhysAddr::new(addr).align_up(PAGE_SIZE as u64);
     PhysFrame::from_start_address(pa)
 }
 
 /// Allocate `frame_count` contiguous page frames.
+/// The number of frames is rounded up to the next power of two!
 pub fn alloc(frame_count: usize) -> PhysFrameRange {
-//    PAGE_FRAME_ALLOCATOR.lock().alloc_block(frame_count)
-   panic!("Page frame allocator is not implemented yet"); 
-   PhysFrameRange {
-        start: PhysFrame::from_start_address(PhysAddr::new(0x1000)).expect("Invalid start address"),
-        end: PhysFrame::from_start_address(PhysAddr::new(0x1000 + frame_count as u64 * PAGE_SIZE as u64))
-            .expect("Invalid end address"),
+    let rounded_frame_count = round_up_pow2(frame_count).unwrap();
+    let exponent = rounded_frame_count.trailing_zeros(); // -> u32
+
+    // Allocate 2^order frames
+    // returning the offset in number of frames from beginning = 0
+    match PAGE_FRAME_ALLOCATOR.get().unwrap().get(0, Flags::o(exponent as usize)) {
+        Ok(first_frame) => {
+            let start_frame = PhysFrame::containing_address(PhysAddr::new(first_frame as u64));
+
+            let ret_frame_range = PhysFrameRange {
+                start: start_frame,
+                end:  start_frame + (PAGE_SIZE * rounded_frame_count) as u64,
+            };
+            info!("frames_lf::alloc frame_count={}, range = {:?}", frame_count, ret_frame_range);
+            return ret_frame_range
+        }
+        Err(e) => {
+            panic!("PageFrameAllocator: Out of memory!")
+        }
     }
 }
 
 /// Free a contiguous range of page `frames`.
-/// Unsafe because invalid parameters may break the list allocator.
-pub unsafe fn free(frames: PhysFrameRange) {
-/*    unsafe {
-        PAGE_FRAME_ALLOCATOR.lock().free_block(frames);
-    }
-    */
-}
+/// The number of frames must be a power of two otherwise the function will panic.
+pub fn free(frames: PhysFrameRange) {
 
-/*
-/// Get a dump of the current free list.
-pub fn dump() -> String {
-    "TEST"
- //   format!("{:?}", PAGE_FRAME_ALLOCATOR.lock())
-}
-*/
+    let start_frame_number: u64 = frames.start.start_address().as_u64() / PAGE_SIZE as u64;
+    let len = (frames.end.start_address().as_u64()
+             - frames.start.start_address().as_u64())
+             / PAGE_SIZE as u64;
 
+    // must be power of two
+    assert!(len.is_power_of_two());
 
-
-//
-// From here data and code is only used during booting
-//
-
-// Storage for free memory regions inserted during booting
-static MAX_FREE_REGIONS: usize = 1024;
-static FREE_FRAME_REGIONS: Mutex<[u64; MAX_FREE_REGIONS]> = Mutex::new([0; MAX_FREE_REGIONS]);
-static NEXT_FREE_FRAME_REGION: AtomicUsize = AtomicUsize::new(0);
-
-// Insert a free frame region into the free frame region array
-pub fn add_free_region(region: PhysFrameRange) {
-    let mut free_start = region.start.start_address().as_u64();
-    let mut free_end = region.end.start_address().as_u64();
-
-    if free_start % PAGE_SIZE as u64 != 0 || free_end % PAGE_SIZE as u64 != 0 {
-        panic!("Region not aligned to PAGE_SIZE");
-    }
-    if free_start >= free_end {
-        panic!("Region free_start >= free_end");
-    }
-
-
-    // Make sure, the first page is not inserted to avoid null pointer panics
-    if free_start == 0 {
-        free_start = 0x1000;
-    }
-
-    // Update the physical limit if this region extends beyond the current limit
-    let current_limit = PHYS_LIMIT.load(Ordering::SeqCst);
-    if free_end > current_limit {
-        PHYS_LIMIT.store(free_end, Ordering::SeqCst);
-    }
-
-    // Store the region in the free frame regions array
-    let mut regions = FREE_FRAME_REGIONS.lock();
-    let mut merged_start = free_start;
-    let mut merged_end = free_end;
-
-    let mut new_regions = [0u64; MAX_FREE_REGIONS];
-    let mut new_index = 0;
-
-    // Merge overlapping/adjacent regions into merged_start/end
-    let current_len = NEXT_FREE_FRAME_REGION.load(Ordering::SeqCst);
-    for i in (0..current_len).step_by(2) {
-        let existing_start = regions[i];
-        let existing_end = regions[i + 1];
-
-        // Overlapping or adjacent
-        if !(merged_end < existing_start || merged_start > existing_end) {
-            merged_start = merged_start.min(existing_start);
-            merged_end = merged_end.max(existing_end);
-        } else {
-            // Keep this region
-            new_regions[new_index] = existing_start;
-            new_regions[new_index + 1] = existing_end;
-            new_index += 2;
+    let exp = len.trailing_zeros() as usize;
+    
+    match PAGE_FRAME_ALLOCATOR.get().unwrap().put(0, start_frame_number as usize, Flags::o(exp)) {
+        Ok(first_frame) => {
+            return ;
+        }
+        Err(e) => {
+            panic!("PageFrameAllocator: free error!")
         }
     }
-
-    // Add the merged region
-    if new_index + 2 > MAX_FREE_REGIONS {
-        panic!("Too many regions");
-    }
-    new_regions[new_index] = merged_start;
-    new_regions[new_index + 1] = merged_end;
-    new_index += 2;
-
-    // Copy back
-    regions[..new_index].copy_from_slice(&new_regions[..new_index]);
-    NEXT_FREE_FRAME_REGION.store(new_index, Ordering::SeqCst);
-}
-
-
-// Reserve a frame region 
-pub fn add_reserved_region(region: PhysFrameRange) {
-    let reserve_start = region.start.start_address().as_u64();
-    let reserve_end = region.end.start_address().as_u64();
-
-    if reserve_start % PAGE_SIZE as u64 != 0 || reserve_end % PAGE_SIZE as u64 != 0 {
-        panic!("Reserved region is not page-aligned");
-    }
-    if reserve_start >= reserve_end {
-        panic!("Reserved region start >= end");
-    }
-
-    let mut regions = FREE_FRAME_REGIONS.lock();
-    let mut new_regions = [0u64; MAX_FREE_REGIONS];
-    let mut new_index = 0;
-
-    let current_len = NEXT_FREE_FRAME_REGION.load(Ordering::SeqCst);
-
-    for i in (0..current_len).step_by(2) {
-        let free_start = regions[i];
-        let free_end = regions[i + 1];
-
-        // No overlap
-        if reserve_end <= free_start || reserve_start >= free_end {
-            new_regions[new_index] = free_start;
-            new_regions[new_index + 1] = free_end;
-            new_index += 2;
-            continue;
-        }
-
-        // Reserve overlaps part of the region — split if necessary
-        if reserve_start > free_start {
-            new_regions[new_index] = free_start;
-            new_regions[new_index + 1] = reserve_start;
-            new_index += 2;
-        }
-
-        if reserve_end < free_end {
-            new_regions[new_index] = reserve_end;
-            new_regions[new_index + 1] = free_end;
-            new_index += 2;
-        }
-    }
-
-    if new_index > MAX_FREE_REGIONS {
-        panic!("Too many free regions after reservation — increase MAX_FREE_REGIONS");
-    }
-
-    // Copy back to the real region list
-    regions[..new_index].copy_from_slice(&new_regions[..new_index]);
-    NEXT_FREE_FRAME_REGION.store(new_index, Ordering::SeqCst);
 }
 
 
 
 
+/// Marker for alignment, e.g., `#[repr(align(4096))] struct Align;`
+#[repr(align(4096))]
+struct AlignMarker;
 
+pub fn aligned_buf(size: usize) -> &'static mut [u8] {
+    let layout = Layout::from_size_align(size, align_of::<AlignMarker>()).unwrap();
 
+    // SAFETY: caller must ensure allocator is initialized
+    let ptr = unsafe { alloc_zeroed(layout) };
 
-
-
-// Dump the free frame regions to the log
-pub fn dump() {
-    info!("Free frame regions:");
-    let mut regions = FREE_FRAME_REGIONS.lock();
-
-    for i in (0..NEXT_FREE_FRAME_REGION.load(Ordering::SeqCst)).step_by(2) {
-        info!("Region {}: Start: {:#x}, End:   {:#x}", i, regions[i], regions[i+1] );
+    if ptr.is_null() {
+        panic!("Out of memory in aligned_buf!");
     }
+
+    unsafe { core::slice::from_raw_parts_mut(ptr, size) }
 }
 
+/// Helper function for 'alloc'
+pub fn round_up_pow2(n: usize) -> Option<usize> {
+    if n == 0 {
+        return None; // 0 cannot be rounded up to a power of two
+    }
+    let next = n.next_power_of_two();
+    // If `n` was already the maximum possible power of two,
+    // `next_power_of_two` will wrap to 0 in release or panic in debug.
+    if next == 0 {
+        None
+    } else {
+        Some(next)
+    }
+}

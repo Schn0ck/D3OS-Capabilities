@@ -13,6 +13,7 @@ use core::sync::atomic::Ordering::Relaxed;
 use crate::{ process_manager, scheduler};
 use crate::capabilities::capability::{Capability, CapabilityFlags};
 use crate::capabilities::cspace::CSpace;
+use crate::{ network, process_manager, scheduler};
 use crate::memory::pages::Paging;
 use crate::memory::vmm::VirtualAddressSpace;
 
@@ -62,4 +63,22 @@ impl Process {
         self.virtual_address_space.dump(self.id);
     }
 
+}
+
+impl PartialEq for Process {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl core::fmt::Debug for Process {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Process").field("id", &self.id).finish()
+    }
+}
+
+impl Drop for Process {
+    fn drop(&mut self) {
+        network::close_sockets_for_process(self)
+    }
 }

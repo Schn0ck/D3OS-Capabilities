@@ -17,14 +17,14 @@
 
 use core::cmp::min;
 use core::{ptr, fmt};
-use spin::{RwLock, RwLockReadGuard};
+use spin::RwLock;
 use x86_64::structures::paging::{PageTable, PageTableFlags, PageTableIndex, PhysFrame};
 use x86_64::{PhysAddr, VirtAddr};
 use x86_64::registers::control::{Cr3, Cr3Flags};
 use x86_64::structures::paging::frame::PhysFrameRange;
 use x86_64::structures::paging::page::{PageRange,Page};
 use x86_64::structures::paging::Size4KiB;
-use log::{info, debug, trace};
+use log::{info, debug};
 
 use crate::memory::{MemorySpace, PAGE_SIZE, frames};
 
@@ -490,10 +490,10 @@ impl PageTableEntryAddress {
 
 impl fmt::Debug for PageTableEntryAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "PageTableEntry ");
+        write!(f, "PageTableEntry ").unwrap();
         for level in (self.level..5).rev() {
-            write!(f, "{}", self.get_pml_part(level));
-            if level != 1 { write!(f, "."); }
+            write!(f, "{}", self.get_pml_part(level)).unwrap();
+            if level != 1 { write!(f, ".").unwrap(); }
         }
         Ok(())
     }
