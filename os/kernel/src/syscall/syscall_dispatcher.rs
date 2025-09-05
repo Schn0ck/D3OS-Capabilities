@@ -25,6 +25,7 @@ use crate::syscall::sys_naming::*;
 
 use crate::{core_local_storage, scheduler, tss};
 use log::{error, info};
+use x86_64::registers::rflags::RFlags;
 use crate::capabilities::capability::CapabilityFlags;
 
 pub const CORE_LOCAL_STORAGE_TSS_RSP0_PTR_INDEX: u64 = 0x00;
@@ -193,7 +194,7 @@ unsafe extern "C" fn syscall_handler() {
 unsafe extern "C" fn get_capability_entry() -> *const () {
     let syscall_number: u64;
     unsafe{asm!("mov {}, rax", out(reg) syscall_number);}
-
+    info!("Syscall number: {}", syscall_number);
     // Get current thread's CSpace through scheduler
     let current_thread = scheduler().current_thread();
 

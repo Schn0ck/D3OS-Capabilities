@@ -10,7 +10,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering::Relaxed;
-use crate::{ process_manager, scheduler};
 use crate::capabilities::capability::{Capability, CapabilityFlags};
 use crate::capabilities::cspace::CSpace;
 use crate::{ network, process_manager, scheduler};
