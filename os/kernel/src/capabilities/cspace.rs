@@ -27,6 +27,7 @@ impl CSpace {
             sys_terminal_read_nb as *const (),
             sys_terminal_write as *const (),
             sys_map_memory as *const (),
+            sys_map_frame_buffer as *const (),
             sys_process_execute_binary as *const (),
             sys_process_id as *const (),
             sys_process_exit as *const (),
@@ -61,7 +62,6 @@ impl CSpace {
             //caps
             sys_share_syscall_cap as *const (),
             sys_revoke_syscall_cap as *const (),
-            sys_map_frame_buffer as *const (),
         ];
         
         let mut num = 0;

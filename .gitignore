@@ -135,3 +135,4 @@ loader/initrd/bin
 nvdimm0
 rtl8139.dump
 towbootctl
+.DS_Store
