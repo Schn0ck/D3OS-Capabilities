@@ -67,6 +67,7 @@ pub mod network;
 pub mod process;
 pub mod storage;
 pub mod syscall;
+pub mod sync;
 pub mod capabilities;
 
 pub mod built_info {
