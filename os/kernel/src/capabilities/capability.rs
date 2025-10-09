@@ -46,9 +46,9 @@ impl<T> Capability<T> {
         }
     }
 
-    pub fn invoke_mut(&mut self) -> Option<spin::MutexGuard<'_, T>> {
+    pub fn invoke_mut(&self) -> Option<MutexGuard<'_, T>> {
         if self.has_permissions(CapabilityFlags::READ | CapabilityFlags::WRITE) {
-            self.obj.as_ref().map(|arc| arc.lock())
+            self.obj.as_ref().map(|arc| arc.lock())//TODO as mut???
         } else {
             None
         }

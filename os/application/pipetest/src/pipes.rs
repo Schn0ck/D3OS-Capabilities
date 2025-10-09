@@ -21,14 +21,16 @@ fn writer_thread() {
         println!("writer_thread: open failed, error: {:?}", res);
         return;
     }
-    let fh = res.unwrap();
+    let cap_handle = res.unwrap();
+    
+    println!("writer_thread: got capability handle = {}", cap_handle);
 
     let mut cnt = 0;
     let mut wbuff: [u8; 1] = [0; 1];
     let mut ch: u8 = b'A'; // start at ASCII 'A'
     loop {
         wbuff[0] = ch;
-        let res = write(fh, &wbuff);
+        let res = write(cap_handle, &wbuff);
         if res.is_err() {
             println!("writer_thread: write failed, error: {:?}", res);
         } else {
@@ -48,7 +50,7 @@ fn writer_thread() {
 //        concurrent::thread::sleep(1000);
     }
 
-    close(fh);
+    close(cap_handle);
     println!("writer_thread: end");
 }
 
@@ -60,12 +62,12 @@ fn reader_thread() {
         println!("reader_thread: open failed, error: {:?}", res);
         return;
     }
-    let fh = res.unwrap();
+    let cap_handle = res.unwrap();
 
     let mut rbuff: [u8; 1] = [0; 1];
     let mut cnt = 0;
     loop {
-        let res = read(fh, &mut rbuff);
+        let res = read(cap_handle, &mut rbuff);
         if res.is_err() {
             println!("reader_thread: read failed, error: {:?}", res);
         } else {
@@ -83,7 +85,7 @@ fn reader_thread() {
 //        concurrent::thread::sleep(1000);
     }
 
-    close(fh);
+    close(cap_handle);
     println!("reader_thread: end");
 }
 

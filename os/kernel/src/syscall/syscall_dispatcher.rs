@@ -194,7 +194,7 @@ unsafe extern "C" fn syscall_handler() {
 unsafe extern "C" fn get_capability_entry() -> *const () {
     let syscall_number: u64;
     unsafe{asm!("mov {}, rax", out(reg) syscall_number);}
-    info!("Syscall number: {}", syscall_number);
+    // info!("Syscall number: {}", syscall_number);
     // Get current thread's CSpace through scheduler
     let current_thread = scheduler().current_thread();
 

@@ -11,18 +11,39 @@ use alloc::string::{String, ToString};
 use core::ptr::slice_from_raw_parts;
 use core::str::from_utf8;
 use core::mem;
+use log::info;
 use naming::shared_types::{OpenOptions, SeekOrigin, RawDirent};
 use syscall::return_vals::{self, Errno};
 use num_enum::FromPrimitive;
 
 use crate::naming::api;
+use crate::scheduler;
+/*pub unsafe extern "sysv64" fn sys_open(path: *const u8, flag_bits: usize) -> isize {
+    let flags = OpenOptions::from_bits(flag_bits).unwrap();
+    return_vals::convert_syscall_result_to_ret_code(api::open(&unsafe { ptr_to_string(path).unwrap() }, flags))
+}*/
 
 pub unsafe extern "sysv64" fn sys_open(path: *const u8, flag_bits: usize) -> isize {
     let flags = OpenOptions::from_bits(flag_bits).unwrap();
-    return_vals::convert_syscall_result_to_ret_code(api::open(&unsafe { ptr_to_string(path).unwrap() }, flags))
+    let path_str = unsafe { ptr_to_string(path).unwrap() };
+
+    match api::open_with_capability(&path_str, flags) {
+        Ok(cap) => {
+            // Store capability in current thread's CSpace
+            if let Some(mut cspace) = scheduler().current_thread().cspace.invoke() {
+                // Store the capability and return its handle
+                // Implementation depends on your CSpace management
+                let handle = cspace.receive_naming_capability(Some(cap));
+                return handle;
+            }
+            Errno::EACCES as isize
+        }
+        Err(errno) => errno as isize
+    }
 }
 
-pub unsafe extern "sysv64" fn sys_read(fh: usize, buffer: *mut u8, buffer_length: usize) -> isize {
+
+/*pub unsafe extern "sysv64" fn sys_read(fh: usize, buffer: *mut u8, buffer_length: usize) -> isize {
     if buffer.is_null() || buffer_length == 0 {
         return Errno::EINVAL as isize;
     }
@@ -31,9 +52,26 @@ pub unsafe extern "sysv64" fn sys_read(fh: usize, buffer: *mut u8, buffer_length
         buf = slice::from_raw_parts_mut(buffer, buffer_length);
     }
     return_vals::convert_syscall_result_to_ret_code(api::read(fh, buf))
+}*/
+
+pub unsafe extern "sysv64" fn sys_read(cap_handle: usize, buffer: *mut u8, buffer_length: usize) -> isize {
+    if buffer.is_null() || buffer_length == 0 {
+        return Errno::EINVAL as isize;
+    }
+
+    let current_thread = scheduler().current_thread();
+    if let Some(cspace) = current_thread.cspace.invoke() {
+        if let Some(cap) = cspace.get_naming_capability(cap_handle) {
+            let buf = unsafe { slice::from_raw_parts_mut(buffer, buffer_length) };
+            return return_vals::convert_syscall_result_to_ret_code(api::read_with_capability(cap, buf));
+        }
+    }
+
+    Errno::EACCES as isize
 }
 
-pub unsafe extern "sysv64" fn sys_write(fh: usize, buffer: *const u8, buffer_length: usize) -> isize {
+
+/*pub unsafe extern "sysv64" fn sys_write(fh: usize, buffer: *const u8, buffer_length: usize) -> isize {
     if buffer.is_null() || buffer_length == 0 {
         return Errno::EINVAL as isize;
     }
@@ -42,14 +80,40 @@ pub unsafe extern "sysv64" fn sys_write(fh: usize, buffer: *const u8, buffer_len
         buf = slice::from_raw_parts(buffer, buffer_length);
     }
     return_vals::convert_syscall_result_to_ret_code(api::write(fh, buf))
+}*/
+
+pub unsafe extern "sysv64" fn sys_write(cap_handle: usize, buffer: *mut u8, buffer_length: usize) -> isize {
+    if buffer.is_null() || buffer_length == 0 {
+        return Errno::EINVAL as isize;
+    }
+
+    let current_thread = scheduler().current_thread();
+    if let Some(cspace) = current_thread.cspace.invoke() {
+        if let Some(cap) = cspace.get_naming_capability(cap_handle) {
+            let buf = unsafe { slice::from_raw_parts_mut(buffer, buffer_length) };
+            return return_vals::convert_syscall_result_to_ret_code(api::write_with_capability(cap, buf));
+        }
+    }
+
+    Errno::EACCES as isize
 }
 
 pub extern "sysv64" fn sys_seek(fh: usize, offset: usize, origin: usize) -> isize {
     return_vals::convert_syscall_result_to_ret_code(api::seek(fh, offset, SeekOrigin::from_primitive(origin)))
 }
 
-pub extern "sysv64" fn sys_close(fh: usize) -> isize {
+/*pub extern "sysv64" fn sys_close(fh: usize) -> isize {
     return_vals::convert_syscall_result_to_ret_code(api::close(fh))
+}*/
+
+pub extern "sysv64" fn sys_close(cap_handle: usize) -> isize {
+    let current_thread = scheduler().current_thread();
+    if let Some(cspace) = current_thread.cspace.invoke() {
+        if let Some(cap) = cspace.get_naming_capability(cap_handle) {
+            return return_vals::convert_syscall_result_to_ret_code(api::close_with_capability(cap));
+        }
+    }
+    Errno::EACCES as isize
 }
 
 pub unsafe extern "sysv64" fn sys_mkdir(path: *const u8) -> isize {

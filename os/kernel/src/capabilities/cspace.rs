@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use log::info;
 use syscall::NUM_SYSCALLS;
 use crate::capabilities::capability::Capability;
+use crate::capabilities::capability_objects::{NamingObject, Syscall};
 use crate::syscall::sys_concurrent::*;
 use crate::syscall::sys_naming::*;
 use crate::syscall::sys_terminal::*;
@@ -15,7 +16,8 @@ use crate::syscall::sys_net::*;
 
 pub struct CSpace {
     syscall_capabilities: Vec<Capability<Syscall>>,
-    //ipc_capabilities: Vec<Capability<>>,
+    naming_capabilities: Vec<Capability<NamingObject>>,
+    //memory_capabilities: Vec<Capability<>>,
     //driver_capabilities: Vec<Capability<>>,
     //... other capability types
 }
@@ -81,15 +83,15 @@ impl CSpace {
         
         Self {
             syscall_capabilities ,
+            naming_capabilities: Vec::new(),
             //memory_capabilities: Vec::new(),
-            //ipc_capabilities: Vec::new(),
             //driver_capabilities: Vec::new(),
             //... initialize other capability types
         }
     }
     
     //TODO implement methods to add, remove, and manage capabilities
-    pub fn receive_syscall_capability(&mut self, capability: Option<Capability<Syscall>>, syscall_num: usize) -> bool{
+    pub fn receive_syscall_capability(&mut self, capability: Option<Capability<Syscall>>, syscall_num: usize) -> isize{
         if let Some(capability) = capability {
             if let Some(cap) = self.syscall_capabilities.get_mut(syscall_num) {
                 cap.add_permissions(capability.get_permissions())
@@ -97,10 +99,9 @@ impl CSpace {
                 self.syscall_capabilities[syscall_num] = capability;
                 
             }
-            return true;
+            return syscall_num.try_into().unwrap(); //panics if syscall num > isize::MAX (9_223_372_036_854_775_808) --> practically impossible
         }
-        
-        false
+        -1
     }
     
     pub fn revoke_syscall_capability(&mut self, syscall_num: usize){
@@ -117,25 +118,22 @@ impl CSpace {
     pub fn remove_syscall_capability(&mut self, syscall_num: usize) -> Capability<Syscall> {
         self.syscall_capabilities.remove(syscall_num)
     }
-}
-
-pub struct Syscall {
-    number: usize,
-    function: *const (),
-}
-
-impl Syscall {
-    pub fn new(number: usize, function: *const ()) -> Self {
-        Self { number, function }
-    }
-
-    pub fn function_pointer(&self) -> *const () {
-        self.function
-    }
     
-    pub fn number(&self) -> usize {self.number}
+    pub fn receive_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{ //TODO more than append only?
+        if let Some(capability) = capability {
+            self.naming_capabilities.push(capability);
+            return self.naming_capabilities.len() as isize - 1; //panic if len > isize::MAX (9_223_372_036_854_775_808) --> practically impossible
+        }
+        
+        -1
+    }
+
+    pub fn get_naming_capability(&self, handle: usize) -> Option<&Capability<NamingObject>> {
+        self.naming_capabilities.get(handle)
+    }
+
+    pub fn get_naming_capability_mut(&mut self, handle: usize) -> Option<&mut Capability<NamingObject>> {
+        self.naming_capabilities.get_mut(handle)
+    }
+
 }
-
-
-unsafe impl Send for Syscall {}
-unsafe impl Sync for Syscall {}

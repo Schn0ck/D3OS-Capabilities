@@ -34,13 +34,13 @@ pub fn open(path: &str, flags: OpenOptions) -> Result<usize, Errno> {
     }
 }
 
-pub fn write(fh: usize, buf: &[u8]) -> Result<usize, Errno> {
-    syscall(SystemCall::Write, &[fh, buf.as_ptr() as usize, buf.len()])
+pub fn write(cap_handle: usize, buf: &[u8]) -> Result<usize, Errno> {
+    syscall(SystemCall::Write, &[cap_handle, buf.as_ptr() as usize, buf.len()])
 }
 
-pub fn read(fh: usize, buf: &mut [u8]) -> Result<usize, Errno> {
+pub fn read(cap_handle: usize, buf: &mut [u8]) -> Result<usize, Errno> {
     syscall(SystemCall::Read, &[
-        fh,
+        cap_handle,
         buf.as_mut_ptr() as usize,
         buf.len(),
     ])
@@ -50,8 +50,8 @@ pub fn seek(fh: usize, offset: usize, origin: SeekOrigin) -> Result<usize, Errno
     syscall(SystemCall::Seek, &[fh, offset, origin.into()])
 }
 
-pub fn close(fh: usize) -> Result<usize, Errno> {
-    syscall(SystemCall::Close, &[fh])
+pub fn close(cap_handle: usize) -> Result<usize, Errno> {
+    syscall(SystemCall::Close, &[cap_handle])
 }
 
 pub fn mkdir(path: &str) -> Result<usize, Errno> {

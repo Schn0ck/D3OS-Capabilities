@@ -11,9 +11,7 @@ pub extern "sysv64" fn sys_share_syscall_cap(thread_id: usize, syscall_number: u
         if let Some(syscall_cap) = sharer_cspace.get_syscall_capability(syscall_number) {
             if let Some(receiver_thread) = scheduler().thread(thread_id){
                 if let Some(mut cspace) = receiver_thread.cspace.invoke(){
-                    if cspace.receive_syscall_capability(syscall_cap.share(syscall_cap.get_permissions()), syscall_number){//Check for Share Flag happens here
-                        return 0;
-                    } 
+                    return cspace.receive_syscall_capability(syscall_cap.share(syscall_cap.get_permissions()), syscall_number) //returns syscall number on success, -1 on failure
                 }
             }
         }

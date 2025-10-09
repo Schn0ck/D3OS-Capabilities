@@ -30,6 +30,8 @@ use super::traits::FileSystem;
 use crate::initrd;
 use naming::shared_types::{OpenOptions, RawDirent, SeekOrigin};
 use syscall::return_vals::Errno;
+use crate::capabilities::capability::Capability;
+use crate::capabilities::capability_objects::{create_naming_capability, NamingObject, ObjectType};
 
 // root of naming service
 pub(super) static ROOT: Once<Arc<dyn FileSystem>> = Once::new();
@@ -59,6 +61,20 @@ pub fn init() {
     //    test::running_tests();
 }
 
+pub fn open_with_capability(path: &str, flags: OpenOptions) -> Result<Capability<NamingObject>, Errno> {
+    open(path, flags).map(|handle| {
+        let object_type = if path.ends_with("/") {
+            ObjectType::Directory
+        } else if flags.contains(OpenOptions::WRITEONLY) {
+            ObjectType::Pipe
+        } else {
+            ObjectType::File
+        };
+        create_naming_capability(handle, object_type, flags)
+    })
+}
+
+
 /// Open/create a named object referenced by `path` using the given `flags`. \
 /// Returns `Ok(object_handle)` or `Err`.
 pub fn open(path: &str, flags: OpenOptions) -> Result<usize, Errno> {
@@ -86,10 +102,28 @@ pub fn write(object_handle: usize, buffer: &[u8]) -> Result<usize, Errno> {
     open_objects::write(object_handle, buffer)
 }
 
+pub fn write_with_capability(cap: &Capability<NamingObject>, buffer: &mut [u8]) -> Result<usize, Errno> {
+    if let Some(obj) = cap.invoke_mut() {
+        info!("writing to obj with handle {}", obj.handle());
+        write(obj.handle(), buffer)
+    } else {
+        info!("could not invoke capability");
+        Err(Errno::EACCES)
+    }
+}
+
 /// Read from the named object referenced by `object_handle` into the given `buffer`. \
 /// Returns `Ok(number of bytes read)` or `Err`.
 pub fn read(object_handle: usize, buffer: &mut [u8]) -> Result<usize, Errno> {
     open_objects::read(object_handle, buffer)
+}
+
+pub fn read_with_capability(cap: &Capability<NamingObject>, buffer: &mut [u8]) -> Result<usize, Errno> {
+    if let Some(obj) = cap.invoke() {
+        read(obj.handle(), buffer)
+    } else {
+        Err(Errno::EACCES)
+    }
 }
 
 /// Move the object pointer for the named object referenced by `object_handle` to the specified `offset` from the `origin`. \
@@ -102,6 +136,14 @@ pub fn seek(object_handle: usize, offset: usize, origin: SeekOrigin) -> Result<u
 /// Returns `Ok(0)` or `Err(errno)`
 pub fn close(object_handle: usize) -> Result<usize, Errno> {
     open_objects::close(object_handle)
+}
+
+pub fn close_with_capability(cap: &Capability<NamingObject>) -> Result<usize, Errno> {
+    if let Some(obj) = cap.invoke() {
+        close(obj.handle())
+    } else {
+        Err(Errno::EACCES)
+    }
 }
 
 /// Create a directory for the given `path`. \
