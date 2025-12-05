@@ -26,8 +26,9 @@ fn print_dir_entry(dentry: DirEntry) {
 }
 
 fn process_ls(path: &str) {
+    todo!("Implement Cap handling");
     // open directory
-    let res = naming::open(path, OpenOptions::DIRECTORY);
+    let res = naming::open(path, OpenOptions::DIRECTORY, 0);
     if res.is_err() {
         print_usage();
         return;

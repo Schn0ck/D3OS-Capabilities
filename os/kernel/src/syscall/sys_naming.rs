@@ -11,11 +11,12 @@ use alloc::string::{String, ToString};
 use core::ptr::slice_from_raw_parts;
 use core::str::from_utf8;
 use core::mem;
-use log::info;
+use log::{info,warn};
 use naming::shared_types::{OpenOptions, SeekOrigin, RawDirent};
 use syscall::return_vals::{self, Errno};
 use num_enum::FromPrimitive;
-
+use crate::capabilities::capability::Capability;
+use crate::capabilities::capability_objects::naming_object::NamingObject;
 use crate::naming::api;
 use crate::scheduler;
 /*pub unsafe extern "sysv64" fn sys_open(path: *const u8, flag_bits: usize) -> isize {
@@ -23,27 +24,32 @@ use crate::scheduler;
     return_vals::convert_syscall_result_to_ret_code(api::open(&unsafe { ptr_to_string(path).unwrap() }, flags))
 }*/
 
-pub unsafe extern "sysv64" fn sys_open(path: *const u8, flag_bits: usize) -> isize {
+pub unsafe extern "sysv64" fn sys_open(path: *const u8, flag_bits: usize, cap_handle: usize) -> isize {
+    let current_thread = scheduler().current_thread();
     let flags = OpenOptions::from_bits(flag_bits).unwrap();
-    let path_str = unsafe { ptr_to_string(path).unwrap() };
-
-    match api::open_with_capability(&path_str, flags) {
-        Ok(cap) => {
-            // Store capability in current thread's CSpace
-            if let Some(mut cspace) = scheduler().current_thread().cspace.invoke() {
-                // Store the capability and return its handle
-                // Implementation depends on your CSpace management
-                let handle = cspace.receive_naming_capability(Some(cap));
-                return handle;
+    let path = unsafe { ptr_to_string(path).unwrap() };
+    if let Some(cspace) = current_thread.cspace.invoke() {
+        if let Some(cap) = cspace.get_naming_capability(cap_handle) {
+            match api::open(&*path, flags, cap) {
+                Ok(cap) => {
+                    // Store capability in current thread's CSpace
+                    if let Some(mut cspace) = scheduler().current_thread().cspace.invoke() {
+                        // Store the capability and return its handle
+                        // Implementation depends on your CSpace management
+                        let handle = cspace.receive_naming_capability(Some(cap));
+                        return handle;
+                    }
+                    return Errno::EACCES as isize;
+                }
+                Err(errno) => return errno as isize
             }
-            Errno::EACCES as isize
         }
-        Err(errno) => errno as isize
     }
+    Errno::EACCES as isize
 }
 
 
-/*pub unsafe extern "sysv64" fn sys_read(fh: usize, buffer: *mut u8, buffer_length: usize) -> isize {
+    /*pub unsafe extern "sysv64" fn sys_read(fh: usize, buffer: *mut u8, buffer_length: usize) -> isize {
     if buffer.is_null() || buffer_length == 0 {
         return Errno::EINVAL as isize;
     }
@@ -63,7 +69,7 @@ pub unsafe extern "sysv64" fn sys_read(cap_handle: usize, buffer: *mut u8, buffe
     if let Some(cspace) = current_thread.cspace.invoke() {
         if let Some(cap) = cspace.get_naming_capability(cap_handle) {
             let buf = unsafe { slice::from_raw_parts_mut(buffer, buffer_length) };
-            return return_vals::convert_syscall_result_to_ret_code(api::read_with_capability(cap, buf));
+            return return_vals::convert_syscall_result_to_ret_code(api::read(cap, buf));
         }
     }
 
@@ -91,15 +97,24 @@ pub unsafe extern "sysv64" fn sys_write(cap_handle: usize, buffer: *mut u8, buff
     if let Some(cspace) = current_thread.cspace.invoke() {
         if let Some(cap) = cspace.get_naming_capability(cap_handle) {
             let buf = unsafe { slice::from_raw_parts_mut(buffer, buffer_length) };
-            return return_vals::convert_syscall_result_to_ret_code(api::write_with_capability(cap, buf));
+            info!("sys_write: Writing {} bytes to file in cap {}", buf.len(), cap_handle);
+            return return_vals::convert_syscall_result_to_ret_code(api::write(cap, buf));
         }
     }
 
     Errno::EACCES as isize
 }
 
-pub extern "sysv64" fn sys_seek(fh: usize, offset: usize, origin: usize) -> isize {
-    return_vals::convert_syscall_result_to_ret_code(api::seek(fh, offset, SeekOrigin::from_primitive(origin)))
+pub extern "sysv64" fn sys_seek(cap_handle: usize, offset: usize, origin: usize) -> isize {
+    let current_thread = scheduler().current_thread();
+    if let Some(cspace) = current_thread.cspace.invoke() {
+        if let Some(cap) = cspace.get_naming_capability(cap_handle) {
+            info!("seek: Seeking to offset {} in cap {}", offset, cap_handle);
+            return return_vals::convert_syscall_result_to_ret_code(api::seek(cap, offset, SeekOrigin::from_primitive(origin)));
+        }
+    }
+
+    Errno::EACCES as isize
 }
 
 /*pub extern "sysv64" fn sys_close(fh: usize) -> isize {
@@ -110,25 +125,76 @@ pub extern "sysv64" fn sys_close(cap_handle: usize) -> isize {
     let current_thread = scheduler().current_thread();
     if let Some(cspace) = current_thread.cspace.invoke() {
         if let Some(cap) = cspace.get_naming_capability(cap_handle) {
-            return return_vals::convert_syscall_result_to_ret_code(api::close_with_capability(cap));
+            return return_vals::convert_syscall_result_to_ret_code(api::close(cap));
         }
     }
     Errno::EACCES as isize
 }
 
-pub unsafe extern "sysv64" fn sys_mkdir(path: *const u8) -> isize {
-    return_vals::convert_syscall_result_to_ret_code(api::mkdir(&unsafe { ptr_to_string(path).unwrap() }))
+pub unsafe extern "sysv64" fn sys_mkdir(path: *const u8, cap_to_dir: Capability<NamingObject>, cap_handle: usize) -> isize {
+    let path = unsafe { ptr_to_string(path).unwrap() };
+    match api::mkdir(&*path, cap_to_dir, cap_handle) {
+        Ok(cap) => {
+            // Store capability in current thread's CSpace
+            if let Some(mut cspace) = scheduler().current_thread().cspace.invoke() {
+                // Store the capability and return its handle
+                // Implementation depends on your CSpace management
+                let handle = cspace.receive_naming_capability(Some(cap));
+                return handle;
+            }
+            Errno::EACCES as isize
+        }
+        Err(errno) => errno as isize
+    }
 }
 
-pub unsafe extern "sysv64" fn sys_touch(path: *const u8) -> isize {
-    return_vals::convert_syscall_result_to_ret_code(api::touch(&unsafe { ptr_to_string(path).unwrap() }))
+pub unsafe extern "sysv64" fn sys_touch(path: *const u8, cap_handle: usize) -> isize {//TODO why handle, not cap?
+    let current_thread = scheduler().current_thread();
+    let path = unsafe { ptr_to_string(path).unwrap() };
+    if let Some(cspace) = current_thread.cspace.invoke() {
+        if let Some(cap) = cspace.get_naming_capability(cap_handle) {
+            match api::touch(&*path, cap) {
+                Ok(cap) => {
+                    // Store capability in current thread's CSpace
+                    if let Some(mut cspace) = scheduler().current_thread().cspace.invoke() {
+                        // Store the capability and return its handle
+                        // Implementation depends on your CSpace management
+                        let handle = cspace.receive_naming_capability(Some(cap));
+                        return handle;
+                    }
+                },
+                Err(_) => return Errno::EINVAL as isize,
+            }
+        }
+    }
+    Errno::EACCES as isize
 }
 
-pub unsafe extern "sysv64" fn sys_mkfifo(path: *const u8) -> isize {
-    return_vals::convert_syscall_result_to_ret_code(api::mkfifo(&unsafe { ptr_to_string(path).unwrap() }))
+pub unsafe extern "sysv64" fn sys_mkfifo(path: *const u8, flag_bits: usize, dir_cap_handle: usize) -> isize {
+    let current_thread = scheduler().current_thread();
+    let flags = OpenOptions::from_bits(flag_bits).unwrap();
+    let path = unsafe { ptr_to_string(path).unwrap() };
+    if let Some(mut cspace) = current_thread.cspace.invoke() {
+        if let Some(cap) = cspace.get_naming_capability(dir_cap_handle) {
+            match api::mkfifo(&*path, flags, cap) {
+                Ok(cap) => {
+                    // Store capability in current thread's CSpace
+                    // Store the capability and return its handle
+                    // Implementation depends on your CSpace management
+                    let handle = cspace.receive_naming_capability(Some(cap));
+                    return handle;
+                }
+                Err(errno) => {
+                    warn!("mkfifo failed");
+                    return errno as isize
+                }
+            }
+        }
+    }
+    Errno::EACCES as isize
 }
 
-/// Convert a raw pointer resulting from a CString to a UTF-8 String
+    /// Convert a raw pointer resulting from a CString to a UTF-8 String
 pub(super) unsafe fn ptr_to_string(ptr: *const u8) -> Result<String, Errno> {
     if ptr.is_null() {
         return Err(Errno::EBADSTR);
@@ -146,7 +212,7 @@ pub(super) unsafe fn ptr_to_string(ptr: *const u8) -> Result<String, Errno> {
     match path {
         Ok(path_str) => Ok(path_str.to_string()),
         Err(_) => Err(Errno::EBADSTR),
-    }   
+    }
 }
 
 pub unsafe extern "sysv64" fn sys_readdir(fh: usize, buffer: *mut u8, buffer_length: usize) -> isize {

@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+use naming::ROOT;
 use naming::shared_types::{OpenOptions, SeekOrigin};
 #[allow(unused_imports)]
 use runtime::*;
@@ -11,13 +12,13 @@ use terminal::{print, println};
 /// Check if a already created file cannot be created again
 fn multiple_create() {
     print!("   test: multiple creates - ");
-    let ret = naming::open("/test.txt", OpenOptions::CREATE | OpenOptions::READWRITE);
+    let ret = naming::open("/test.txt", OpenOptions::CREATE | OpenOptions::READWRITE, ROOT);
     match ret {
         Ok(fd) => {
-            let ret2 = naming::open("/test.txt", OpenOptions::CREATE | OpenOptions::READWRITE);
+            let ret2 = naming::open("/test.txt", OpenOptions::CREATE | OpenOptions::READWRITE, ROOT);
             match ret2 {
                 Ok(fd) => {
-                    println!("failed");
+                    println!("failed second create");
                 }
                 Err(e) => {
                     println!("ok");
@@ -25,7 +26,7 @@ fn multiple_create() {
             }
         }
         Err(e) => {
-            println!("failed");
+            println!("failed first create {:?}", e);
         }
     }
 }
@@ -37,30 +38,31 @@ pub fn main() {
     println!("naming tests");
 
     // opening file
-    let res = naming::open("/file.txt", OpenOptions::READWRITE | OpenOptions::CREATE);
+    let res = naming::open("/file.txt", OpenOptions::READWRITE | OpenOptions::CREATE, ROOT);
     if res.is_err() {
         println!("open error = {:?}", res);
         return;
     }
-    let fd = res.unwrap();
+    let cap_handle = res.unwrap();
+    println!("open file '/file.txt', cap_handle = {}", cap_handle);
 
     // writing to file
     let buff = "Hello, World!".as_bytes();
-    let res = naming::write(fd, buff);
+    let res = naming::write(cap_handle, buff);
     println!("write result = {:?}", res);
 
     // writing to file again
     let buff2 = " NRW Duesseldorf.".as_bytes();
-    let res = naming::write(fd, buff2);
+    let res = naming::write(cap_handle, buff2);
     println!("write result = {:?}", res);
 
     // seek to beginning
-    let res = naming::seek(fd, 0, SeekOrigin::Start);
+    let res = naming::seek(cap_handle, 0, SeekOrigin::Start); //todo
     println!("seek result = {:?}", res);
 
     // reading from file
     let mut rbuff: [u8; 512] = [0; 512];
-    let res = naming::read(fd, &mut rbuff);
+    let res = naming::read(cap_handle, &mut rbuff);
     println!("read result = {:?}", res);
     if let Ok(len) = res {
         for (i, byte) in rbuff.iter().enumerate() {
@@ -76,23 +78,23 @@ pub fn main() {
     }
     println!("");
 
-    let close_res = naming::close(fd);
+    let close_res = naming::close(cap_handle);
     println!("close result = {:?}", close_res);
 
-    let res = naming::mkdir("/test");
+    let res = naming::mkdir("/test", ROOT);
     println!("created dir '/test' = {:?}", res);
 
-    let res = naming::mkdir("/test/dir1");
+    let res = naming::mkdir("/test/dir1", ROOT);
     println!("created dir '/test/dir1' = {:?}", res);
 
-    let res = naming::mkdir("/test/dir2");
+    let res = naming::mkdir("/test/dir2", ROOT);
     println!("created dir '/test/dir2' = {:?}", res);
 
-    let res = naming::touch("/test/file1.txt");
+    let res = naming::touch("/test/file1.txt", ROOT);
     println!("created file '/test/file1.txt' = {:?}", res);
 
     // opening directory
-    let res = naming::open("/test", OpenOptions::DIRECTORY);
+    let res = naming::open("/test", OpenOptions::DIRECTORY, ROOT);
     if res.is_err() {
         println!("open error = {:?}", res);
         return;

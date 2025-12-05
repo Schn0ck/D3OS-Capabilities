@@ -2,8 +2,15 @@
 
 
 use alloc::sync::Arc;
+use alloc::vec;
+use core::fmt;
+use core::fmt::{Debug, Formatter};
+use core::marker::PointeeSized;
+use core::ops::Deref;
 use bitflags::bitflags;
+use log::{info, warn};
 use spin::{Mutex, MutexGuard};
+use crate::syscall::sys_vmem::init_fb_info;
 
 bitflags! {
     #[derive(Clone, Copy)]
@@ -16,7 +23,7 @@ bitflags! {
     }
 }
 
-pub struct Capability<T> {
+pub struct Capability<T: ?Sized> {
     obj: Option<Arc<Mutex<T>>>,
     flags: CapabilityFlags,
 }
@@ -29,6 +36,13 @@ impl<T> Capability<T> {
             flags
         }
     }
+    
+    pub fn is_locked(&self) -> bool {
+        if let Some(obj) = &self.obj{
+            return obj.is_locked();
+        }
+        true
+    }
 
     pub fn has_permissions(&self, flags: CapabilityFlags) -> bool {
         self.flags.contains(flags)
@@ -39,20 +53,26 @@ impl<T> Capability<T> {
     }
 
     pub fn invoke(&self) -> Option<MutexGuard<'_, T>> {
-        if self.has_permissions(CapabilityFlags::READ) {
-            self.obj.as_ref().map(|arc| arc.lock())
-        } else {
-            None
+        if !self.flags.contains(CapabilityFlags::READ) {
+            warn!("Tried to invoke a capability without READ permission");
+            return None;
         }
+
+        self.obj.as_ref()?.try_lock()
+
+        // if let Some(content) = self.obj.as_ref() {
+        //     return content.try_lock(); //old: .map(|arc| arc.lock())
+        // }
+        // None
     }
 
-    pub fn invoke_mut(&self) -> Option<MutexGuard<'_, T>> {
-        if self.has_permissions(CapabilityFlags::READ | CapabilityFlags::WRITE) {
-            self.obj.as_ref().map(|arc| arc.lock())//TODO as mut???
-        } else {
-            None
-        }
-    }
+    // pub fn invoke_mut(&mut self) -> Option<MutexGuard<'_, T>> {
+    //     if !self.flags.contains(CapabilityFlags::READ| CapabilityFlags::WRITE) {
+    //         return None;
+    //     }
+    //     
+    //     self.obj.as_mut()?.lock()
+    // } Not needed due to Arc
 
 
     pub fn share(&self, new_flags: CapabilityFlags) -> Option<Capability<T>> {
@@ -60,13 +80,9 @@ impl<T> Capability<T> {
             return None;
         }
 
-        if !self.flags.contains(new_flags) {
-            return None;
-        }
-
         self.obj.as_ref().map(|arc| Capability {
             obj: Some(Arc::clone(arc)), 
-            flags: new_flags,
+            flags: new_flags & self.flags, //Share with less or equal permissions
         })
     }
 
@@ -91,14 +107,32 @@ impl<T> Capability<T> {
         new_cap
     }
     
-    pub fn add_permissions(&mut self, flags: CapabilityFlags) {
-        self.flags.insert(flags);
-    }
-
     pub fn revoke(&mut self) {
         self.obj = None;
         self.flags = CapabilityFlags::empty();
     }
+    
+    pub fn combine(&self, other: &Capability<T>) -> Option<Capability<T>> {
+        // Only allow combining if both capabilities refer to the same object
+        if let Some(obj) = &self.obj {
+            if let Some(other_obj) = &other.obj {
+                if Arc::<Mutex<T>>::as_ptr(obj) == Arc::<Mutex<T>>::as_ptr(other_obj) {
+                    return Some(Capability {
+                        obj: self.obj.clone(),
+                        flags: self.flags | other.flags,
+                    });
+                }
+            } 
+        }
+        None
+    }
+
+    // pub fn add_permissions(&mut self, flags: CapabilityFlags) {
+    //     self.flags.insert(flags);
+    // }
+    // FORBIDDEN. Get rights by share or transfer!!!
+    // Could lead to rights escalation.
+
 }
 
 // Hilfreiche Methoden für die Erstellung von Capabilities mit verschiedenen Berechtigungen
@@ -131,4 +165,3 @@ impl<T> Capability<T> {
         Self::new(obj, CapabilityFlags::READ | CapabilityFlags::EXECUTE | CapabilityFlags::SHARE)
     }
 }
-

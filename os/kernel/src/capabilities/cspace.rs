@@ -1,11 +1,18 @@
 #![warn(missing_docs)]
 
-
+use alloc::string::String;
 use alloc::vec::Vec;
+use core::ops::{Add, Deref};
 use log::info;
+use spin::Once;
+use naming::shared_types::OpenOptions;
 use syscall::NUM_SYSCALLS;
+use crate::capabilities::capability;
 use crate::capabilities::capability::Capability;
-use crate::capabilities::capability_objects::{NamingObject, Syscall};
+use crate::capabilities::capability_objects::naming_object::{create_naming_capability, NamingObject};
+use crate::capabilities::capability_objects::syscall_object::Syscall;
+use crate::naming::{api, lookup};
+use crate::naming::traits::{as_named_object, DirectoryObject, NamedObject};
 use crate::syscall::sys_concurrent::*;
 use crate::syscall::sys_naming::*;
 use crate::syscall::sys_terminal::*;
@@ -14,7 +21,9 @@ use crate::syscall::sys_vmem::*;
 use crate::syscall::sys_caps::*;
 use crate::syscall::sys_net::*;
 
-pub struct CSpace {
+const BROADCAST_PIPE : Once<Capability<NamingObject>> = Once::new();
+
+pub struct CSpace{
     syscall_capabilities: Vec<Capability<Syscall>>,
     naming_capabilities: Vec<Capability<NamingObject>>,
     //memory_capabilities: Vec<Capability<>>,
@@ -22,20 +31,20 @@ pub struct CSpace {
     //... other capability types
 }
 
-impl CSpace {
+impl CSpace{ //TODO shared CSpace between all threads in a process?
     pub fn new() -> Self {
         let syscall_fns: [*const (); NUM_SYSCALLS] = [
-            sys_terminal_read as *const (),
+            sys_terminal_read as *const (), //0
             sys_terminal_read_nb as *const (),
             sys_terminal_write as *const (),
             sys_map_memory as *const (),
             sys_map_frame_buffer as *const (),
-            sys_process_execute_binary as *const (),
+            sys_process_execute_binary as *const (), //5
             sys_process_id as *const (),
             sys_process_exit as *const (),
             sys_thread_create as *const (),
             sys_thread_id as *const (),
-            sys_thread_switch as *const (),
+            sys_thread_switch as *const (), //10
             sys_thread_sleep as *const (),
             sys_thread_join as *const (),
             sys_thread_exit as *const (),
@@ -64,6 +73,7 @@ impl CSpace {
             //caps
             sys_share_syscall_cap as *const (),
             sys_revoke_syscall_cap as *const (),
+            sys_share_naming_cap as *const (),
         ];
         
         let mut num = 0;
@@ -80,24 +90,33 @@ impl CSpace {
          if let Some(mut cap) = syscall_capabilities.get_mut(13) {
             //cap.revoke();
         }
+
+        let mut naming_capabilities = Vec::new();
+        //check if naming is initialized already
+        if api::ROOT.is_completed() { naming_capabilities.push(api::root()); }
+        
+        // if let Some(root) = api::ROOT.get(){ 
+        //     let root_cap = create_naming_capability(NamedObject::from(root.root_dir()), OpenOptions::all(), None);//NamedObject::DirectoryObject(root.root_dir()), OpenOptions::all(), None);
+        //     naming_capabilities.push(root_cap);
+        // }
         
         Self {
-            syscall_capabilities ,
-            naming_capabilities: Vec::new(),
+            syscall_capabilities,
+            naming_capabilities,
             //memory_capabilities: Vec::new(),
             //driver_capabilities: Vec::new(),
             //... initialize other capability types
         }
     }
     
-    //TODO implement methods to add, remove, and manage capabilities
     pub fn receive_syscall_capability(&mut self, capability: Option<Capability<Syscall>>, syscall_num: usize) -> isize{
         if let Some(capability) = capability {
             if let Some(cap) = self.syscall_capabilities.get_mut(syscall_num) {
-                cap.add_permissions(capability.get_permissions())
+                if let Some(combined) = capability.combine(cap){
+                    self.syscall_capabilities[syscall_num] = combined
+                } //else they dont point to the same syscall so keep current
             } else {
                 self.syscall_capabilities[syscall_num] = capability;
-                
             }
             return syscall_num.try_into().unwrap(); //panics if syscall num > isize::MAX (9_223_372_036_854_775_808) --> practically impossible
         }
@@ -119,7 +138,7 @@ impl CSpace {
         self.syscall_capabilities.remove(syscall_num)
     }
     
-    pub fn receive_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{ //TODO more than append only?
+    pub fn receive_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{
         if let Some(capability) = capability {
             self.naming_capabilities.push(capability);
             return self.naming_capabilities.len() as isize - 1; //panic if len > isize::MAX (9_223_372_036_854_775_808) --> practically impossible
