@@ -5,7 +5,7 @@ extern crate alloc;
 #[allow(unused_imports)]
 use runtime::*;
 use terminal::{print, println};
-use naming::mkdir;
+use naming::{mkdir, ROOT};
 
 #[unsafe(no_mangle)]
 pub fn main() {
@@ -14,7 +14,7 @@ pub fn main() {
         println!("Arg[{}]: {}", i, arg);
     }
 
-    let res = mkdir("/home/schoettner");
+    let res = mkdir("/home/schoettner", ROOT);
 
     println!("app: mkdir {:?}", res);
 }

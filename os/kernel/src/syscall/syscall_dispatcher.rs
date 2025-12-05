@@ -117,6 +117,7 @@ unsafe extern "C" fn syscall_handler() {
     "push r13",
     "push r14",
     "push r15",
+    "push 0",// push another value, so that the stack is aligned for u128s (% 16)
 
     // copy 4th argument to rcx to adhere x86_64 ABI
     "mov rcx, r10",
@@ -163,6 +164,7 @@ unsafe extern "C" fn syscall_handler() {
     "call rax", // Call system call function pointer
 
     // Restore registers
+    "pop r15", // the 0 from above
     "pop r15",
     "pop r14",
     "pop r13",
@@ -197,6 +199,8 @@ unsafe extern "C" fn get_capability_entry() -> *const () {
     // info!("Syscall number: {}", syscall_number);
     // Get current thread's CSpace through scheduler
     let current_thread = scheduler().current_thread();
+    
+    //info!("cspace obj is locked: {}", current_thread.cspace.is_locked());
 
     // Check capability and return function pointer if allowed
     if let Some(cspace) = current_thread.cspace.invoke() {

@@ -23,12 +23,14 @@ use shared_types::{DirEntry, FileType, OpenOptions, RawDirent, SeekOrigin};
 use syscall::{SystemCall, return_vals::Errno, syscall};
 
 
+pub static ROOT : usize = 0;
 
-pub fn open(path: &str, flags: OpenOptions) -> Result<usize, Errno> {
+pub fn open(path: &str, flags: OpenOptions, dir_handle: usize) -> Result<usize, Errno> {
     match CString::new(path) {
         Ok(c_path) => syscall(SystemCall::Open, &[
             c_path.as_bytes().as_ptr() as usize,
             flags.bits(),
+            dir_handle,
         ]),
         Err(_) => Err(Errno::EBADSTR),
     }
@@ -46,24 +48,24 @@ pub fn read(cap_handle: usize, buf: &mut [u8]) -> Result<usize, Errno> {
     ])
 }
 
-pub fn seek(fh: usize, offset: usize, origin: SeekOrigin) -> Result<usize, Errno> {
-    syscall(SystemCall::Seek, &[fh, offset, origin.into()])
+pub fn seek(cap_handle: usize, offset: usize, origin: SeekOrigin) -> Result<usize, Errno> {
+    syscall(SystemCall::Seek, &[cap_handle, offset, origin.into()])
 }
 
 pub fn close(cap_handle: usize) -> Result<usize, Errno> {
     syscall(SystemCall::Close, &[cap_handle])
 }
 
-pub fn mkdir(path: &str) -> Result<usize, Errno> {
+pub fn mkdir(path: &str, dir_handle: usize) -> Result<usize, Errno> {
     match CString::new(path) {
-        Ok(c_path) => syscall(SystemCall::MkDir, &[c_path.as_bytes().as_ptr() as usize]),
+        Ok(c_path) => syscall(SystemCall::MkDir, &[c_path.as_bytes().as_ptr() as usize, dir_handle]),
         Err(_) => Err(Errno::EBADSTR),
     }
 }
 
-pub fn touch(path: &str) -> Result<usize, Errno> {
+pub fn touch(path: &str, dir_handle: usize) -> Result<usize, Errno> {
     match CString::new(path) {
-        Ok(c_path) => syscall(SystemCall::Touch, &[c_path.as_bytes().as_ptr() as usize]),
+        Ok(c_path) => syscall(SystemCall::Touch, &[c_path.as_bytes().as_ptr() as usize, dir_handle]),
         Err(_) => Err(Errno::EBADSTR),
     }
 }
@@ -134,9 +136,9 @@ pub fn cd(path: &str) -> Result<usize, Errno> {
     }
 }
 
-pub fn mkfifo(path: &str) -> Result<usize, Errno> {
+pub fn mkfifo(path: &str, flags: OpenOptions, dir_handle: usize) -> Result<usize, Errno> {
     match CString::new(path) {
-        Ok(c_path) => syscall(SystemCall::Mkfifo, &[c_path.as_bytes().as_ptr() as usize]),
+        Ok(c_path) => syscall(SystemCall::Mkfifo, &[c_path.as_bytes().as_ptr() as usize, flags.bits(), dir_handle]),
         Err(_) => Err(Errno::EBADSTR),
     }
 }

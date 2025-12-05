@@ -49,6 +49,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::naked_asm;
 use core::ptr;
+use core::ptr::null;
 use goblin::elf::Elf;
 use goblin::elf64;
 use log::info;
@@ -130,7 +131,7 @@ impl Thread {
                 .read()
                 .kernel_process()
                 .expect("Trying to create a kernel thread before process initialization!"),
-            cspace: Capability::new(CSpace::new(), CapabilityFlags::READ | CapabilityFlags::WRITE | CapabilityFlags::SHARE),
+            cspace: Capability::null(), //Todo: Check if Kernel threads need CSpace  //Capability::new(CSpace::new(), CapabilityFlags::READ | CapabilityFlags::WRITE | CapabilityFlags::SHARE),
             user_kickoff: VirtAddr::zero(),
             entry,
         };

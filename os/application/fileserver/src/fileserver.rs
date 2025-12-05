@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 use alloc::vec;
 use spin::Mutex;
-use naming::{close, open, read, write};
+use naming::{close, open, read, write, ROOT};
 use syscall::return_vals::Errno;
 use concurrent::thread;
 
@@ -157,7 +157,7 @@ impl FileServer {
         };
 
         // Try to open via naming service
-        match open(&path, ns_flags) {
+        match open(&path, ns_flags, ROOT) {
             Ok(ns_handle) => {
                 let handle = self.allocate_handle();
                 let mut handles = self.handles.lock();

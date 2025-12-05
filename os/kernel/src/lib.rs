@@ -13,6 +13,7 @@
 #![feature(abi_x86_interrupt)]
 #![feature(map_try_insert)]
 #![feature(str_split_remainder)]
+#![feature(sized_hierarchy)]
 #![allow(internal_features)]
 #![no_std]
 
