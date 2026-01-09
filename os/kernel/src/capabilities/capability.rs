@@ -2,16 +2,9 @@
 
 
 use alloc::sync::Arc;
-use alloc::vec;
-use core::fmt;
-use core::fmt::{Debug, Formatter};
-use core::marker::PointeeSized;
-use core::ops::Deref;
 use bitflags::bitflags;
-use log::{info, warn};
+use log::warn;
 use spin::{Mutex, MutexGuard};
-use crate::syscall::sys_vmem::init_fb_info;
-
 bitflags! {
     #[derive(Clone, Copy)]
     pub struct CapabilityFlags: u32 {
@@ -23,9 +16,15 @@ bitflags! {
     }
 }
 
-pub struct Capability<T: ?Sized> {
+pub struct Capability<T> {
     obj: Option<Arc<Mutex<T>>>,
     flags: CapabilityFlags,
+}
+
+impl<T> Capability<T> {
+    pub(crate) fn is_none(&self) -> bool {
+        self.obj.is_none()
+    }
 }
 
 impl<T> Capability<T> {
@@ -36,13 +35,6 @@ impl<T> Capability<T> {
             flags
         }
     }
-    
-    pub fn is_locked(&self) -> bool {
-        if let Some(obj) = &self.obj{
-            return obj.is_locked();
-        }
-        true
-    }
 
     pub fn has_permissions(&self, flags: CapabilityFlags) -> bool {
         self.flags.contains(flags)
@@ -51,7 +43,7 @@ impl<T> Capability<T> {
     pub fn get_permissions(&self) -> CapabilityFlags {
         self.flags
     }
-
+    
     pub fn invoke(&self) -> Option<MutexGuard<'_, T>> {
         if !self.flags.contains(CapabilityFlags::READ) {
             warn!("Tried to invoke a capability without READ permission");
@@ -119,7 +111,7 @@ impl<T> Capability<T> {
                 if Arc::<Mutex<T>>::as_ptr(obj) == Arc::<Mutex<T>>::as_ptr(other_obj) {
                     return Some(Capability {
                         obj: self.obj.clone(),
-                        flags: self.flags | other.flags,
+                        flags: self.flags.clone() | other.flags.clone(),
                     });
                 }
             } 

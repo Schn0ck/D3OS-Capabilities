@@ -21,21 +21,22 @@ pub enum SystemCall {
     TerminalWrite,
     MapMemory,
     MapFrameBuffer,
-    ProcessExecuteBinary,
+    ProcessExecuteBinary, //5
     ProcessId,
     ProcessExit,
     ThreadCreate,
     ThreadId,
-    ThreadSwitch,
+    ThreadSwitch, //10
     ThreadSleep,
     ThreadJoin,
     ThreadExit,
     GetSystemTime,
-    GetDate,
+    GetDate, //15
     SetDate,
+    Root,
     Open,
     Read,
-    Write,
+    Write, //20
     Seek,
     Close,
     MkDir,

@@ -38,5 +38,5 @@ pub fn create_naming_capability(object: NamedObject, rights: OpenOptions, parent
         flags |= CapabilityFlags::WRITE;
     }
 
-    Capability::new(NamingObject::new(object, rights, parent), flags)
+    Capability::new(NamingObject::new(object, rights, parent), flags | CapabilityFlags::SHARE) //Todo make it customizable
 }

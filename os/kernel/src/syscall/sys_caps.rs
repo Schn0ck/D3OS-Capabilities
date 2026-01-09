@@ -1,20 +1,34 @@
 use core::arch::asm;
 use log::{error, info};
-use crate::capabilities::capability::CapabilityFlags;
+use crate::capabilities::capability::{Capability, CapabilityFlags};
 use crate::scheduler;
 
 /**
 Share cap with same permissions
  */
-pub extern "sysv64" fn sys_share_syscall_cap(thread_id: usize, syscall_number: usize) -> isize {
-    // Get current thread's CSpace through scheduler
-    if let Some(sharer_cspace) = scheduler().current_thread().cspace.invoke() {
-        if let Some(syscall_cap) = sharer_cspace.get_syscall_capability(syscall_number) {
-            if let Some(receiver_thread) = scheduler().thread(thread_id){
-                if let Some(mut cspace) = receiver_thread.cspace.invoke(){
-                    return cspace.receive_syscall_capability(syscall_cap.share(syscall_cap.get_permissions()), syscall_number) //returns syscall number on success, -1 on failure
-                }
+pub extern "sysv64" fn sys_share_syscall_cap(thread_id: usize, syscall_number: usize) -> isize { //TODO handle the same way as share naming cap
+    let cur_thread = scheduler().current_thread();
+    let shared_cap =
+        if let Some(sharer_cspace) = cur_thread.cspace.invoke(){
+            if let Some(syscall_cap) = sharer_cspace.get_syscall_capability(syscall_number) {
+                syscall_cap.share(syscall_cap.get_permissions())
+            } else {
+                error!(" sharing naming cap: naming cap not found in sharer cspace");
+                None
             }
+        } else {
+            error!(" sharing naming cap: failed to invoke sharer cspace");
+            None
+        };
+
+    if let Some(receiver_thread) = scheduler().thread(thread_id) {
+        if let Some(mut cspace) = receiver_thread.cspace.invoke() {
+            info!("     cspace found");
+            if let Some(ref cap) = shared_cap {
+                return cspace.receive_syscall_capability(shared_cap, syscall_number);
+            }
+        } else {
+            error!(" receiver cspace not found")
         }
     }
     -5
@@ -29,24 +43,32 @@ pub extern "sysv64" fn sys_revoke_syscall_cap(thread_id: usize, syscall_number: 
     -5
 }
 
-pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, naming_object_number: usize) -> isize { //TODO variable permissions
-    // Get current thread's CSpace through scheduler
-    info!("Sharing naming cap with number {} to thread {}", naming_object_number, thread_id);
-    if let Some(sharer_cspace) = scheduler().current_thread().cspace.invoke() {
-        info!("     sharer cspace found");
-        if let Some(naming_cap) = sharer_cspace.get_naming_capability(naming_object_number) {
-            info!("     naming cap found");
-            if let Some(receiver_thread) = scheduler().thread(thread_id){
-                info!("     receiver thread found, id {}", receiver_thread.id()); //TODO FAILS IN THE INFO!
-                //info!("     receiver cspace is locked: {}", receiver_thread.cspace.is_locked());
-                if let Some(mut cspace) = receiver_thread.cspace.invoke(){ //todo fails here!!! Invoking twice????
-                    info!("     cspace found"); 
-                    return cspace.receive_naming_capability(naming_cap.share(naming_cap.get_permissions())) //returns naming number on success, -1 on failure
-                }
-                else { 
-                    error!(" receiver cspace not found")
-                }
+pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, naming_object_number: usize) -> isize {
+    let cur_thread = scheduler().current_thread();
+
+    
+    // Scope the first lock so it's dropped before we try to acquire the second one
+    let shared_cap = 
+        if let Some(sharer_cspace) = cur_thread.cspace.invoke(){
+            if let Some(naming_cap) = sharer_cspace.get_naming_capability(naming_object_number) {
+                naming_cap.share(naming_cap.get_permissions())
+            } else {
+                error!(" sharing naming cap: naming cap not found in sharer cspace");
+                None
             }
+        } else {
+            error!(" sharing naming cap: failed to invoke sharer cspace");
+            None
+    };
+
+    if let Some(receiver_thread) = scheduler().thread(thread_id) {
+        if let Some(mut cspace) = receiver_thread.cspace.invoke() {
+            info!("     cspace found");
+            if let Some(ref cap) = shared_cap {
+                return cspace.receive_naming_capability(shared_cap);
+            }
+        } else {
+            error!(" receiver cspace not found")
         }
     }
     -5

@@ -3,7 +3,7 @@
 extern crate alloc;
 
 use naming::shared_types::OpenOptions;
-use naming::{close, mkfifo, open, read, write, ROOT};
+use naming::{close, mkfifo, open, read, root, write, ROOT};
 
 use concurrent::thread;
 #[allow(unused_imports)]
@@ -17,36 +17,35 @@ const NR_OF_ITERATIONS: u32 = 6;
 fn writer_thread() {
     let thread = thread::current().unwrap();
     
-    let cap_handle = 1; //TODO receive number somehow
+    let cap_handle = 2; //TODO receive number somehow
     
     println!("writer_thread: got capability handle = {}", cap_handle);
-
-    thread::sleep(10000);
 
     let mut cnt = 0;
     let mut wbuff: [u8; 1] = [0; 1];
     let mut ch: u8 = b'A'; // start at ASCII 'A'
-    // loop {
+    loop {
         wbuff[0] = ch;
-         let res = write(cap_handle, &wbuff);
-        // if res.is_err() {
-        //     println!("writer_thread: write failed, error: {:?}", res);
-        // } else {
-        //     println!("writer_thread: wrote one byte = '{}'", ch as char);
-        // 
-        //     // Next letter
-        //     ch = if ch == b'Z' {
-        //         b'A' // wrap around after 'Z'
-        //     } else {
-        //         ch + 1
-        //     };
-        // }
-        // cnt = cnt + 1;
-        // if cnt > NR_OF_ITERATIONS {
-        //     break;
-        // }
-//        concurrent::thread::sleep(1000);
-//     }
+        let res = write(cap_handle, &wbuff); //TODO if cap not valid then Page Fault!!
+
+        if res.is_err() {
+            println!("writer_thread: write failed, error: {:?}", res);
+        } else {
+            println!("writer_thread: wrote one byte = '{}'", ch as char);
+
+            // Next letter
+            ch = if ch == b'Z' {
+                b'A' // wrap around after 'Z'
+            } else {
+                ch + 1
+            };
+        }
+        cnt = cnt + 1;
+        if cnt > NR_OF_ITERATIONS {
+            break;
+        }
+       concurrent::thread::sleep(1000);
+    }
 
     // close(cap_handle);
     println!("writer_thread: end");
@@ -60,11 +59,11 @@ fn reader_thread() {
     //     println!("reader_thread: open failed, error: {:?}", res);
     //     return;
     // }
-    let cap_handle = 1; //TODO receive number somehow
+    let cap_handle = 3; //TODO receive number somehow
 
     let mut rbuff: [u8; 1] = [0; 1];
     let mut cnt = 0;
-    //loop {
+    loop {
         let res = read(cap_handle, &mut rbuff);
         if res.is_err() {
             println!("reader_thread: read failed, error: {:?}", res);
@@ -77,11 +76,11 @@ fn reader_thread() {
             }
         }
         cnt = cnt + 1;
-        // if cnt > NR_OF_ITERATIONS {
-        //     break;
-        // }
-//        concurrent::thread::sleep(1000);
-    //}
+        if cnt > NR_OF_ITERATIONS {
+            break;
+        }
+       concurrent::thread::sleep(1000);
+    }
 
     // close(cap_handle);
     println!("reader_thread: end");
@@ -91,6 +90,14 @@ fn reader_thread() {
 pub fn main() {
     println!("named pipe demo: start");
 
+    if root().is_err() {
+        return;
+    }
+
+    println!("got root capability");
+
+    // debug_print_caps(thread::current().unwrap().id());
+
     let res = mkfifo("/mypipe", OpenOptions::READWRITE, ROOT);
     if res.is_err() {
         println!("mkfifo failed, error: {:?}", res);
@@ -98,6 +105,23 @@ pub fn main() {
     }
     let pipe_cap = res.unwrap();
     println!("mkfifo: ok, cap_handle = {}", pipe_cap);
+
+    write(pipe_cap, b"Hello from main thread!").unwrap();
+    let buf = &mut [0u8; 23];
+    read(pipe_cap, buf).unwrap();
+
+    // Print individual bytes as characters
+    print!("Read: ");
+    for &byte in buf.iter() {
+        if byte != 0 {  // Skip null bytes
+            print!("{}", byte as char);
+        }
+    }
+    println!("");
+
+
+    share_naming_object(thread::current().unwrap().id(), pipe_cap);
+
     // 
     // let mut buff: [u8; 1] = [0; 1];
     // buff[0] = b'A';
@@ -108,6 +132,8 @@ pub fn main() {
     // println!("read result = {}", rbuff[0] as char);
     // 
     //Ok up to here
+
+    // debug_print_caps(thread::current().unwrap().id());
     
     let writer = thread::create(|| {
         writer_thread();
@@ -115,16 +141,12 @@ pub fn main() {
     
     if let Some(w) = writer {
         println!("Starting writer, id {}", w.id());
+        share_syscall(w.id(), 20);
         share_naming_object(w.id(),pipe_cap); //TODO share cap with custom rights (e.g. readonly on a readwrite cap)
-        share_naming_object(w.id(),pipe_cap); //TODO share cap with custom rights (e.g. readonly on a readwrite cap)
-        share_naming_object(w.id(),pipe_cap); //TODO share cap with custom rights (e.g. readonly on a readwrite cap)
-        share_naming_object(w.id(),pipe_cap); //TODO share cap with custom rights (e.g. readonly on a readwrite cap)
-        w.join();
+        w.join()
     }
 
-
     println!("Writer done, starting reader");
-    
     
     let reader = thread::create(|| {
         reader_thread();

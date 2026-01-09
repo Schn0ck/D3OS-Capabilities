@@ -64,14 +64,14 @@ pub fn init() {
     //    test::running_tests();
 }
 
-pub(crate) fn root() -> Capability<NamingObject> { //Every threat can access Root dir
+pub(crate) fn root() -> Result<Capability<NamingObject>, Errno> { //Every threat can access Root dir
     match open_objects::open("/", OpenOptions::all()){
         Ok(root) => {
-            create_naming_capability(root, OpenOptions::all(), None)
+            Ok(create_naming_capability(root, OpenOptions::all(), None))
         },
         Err(e) => {
             error!("root not found");
-            Capability::null()
+            Err(e)
         },
     }
 }
@@ -351,7 +351,7 @@ pub fn cd(path: &String) -> Result<usize, Errno> {
 /// Returns `Ok(0)` or `Err(errno)`
 pub fn mkfifo(path: &str, flags: OpenOptions, cap_to_dir:  &Capability<NamingObject>) -> Result<Capability<NamingObject>, Errno> {
     //Before: mkfifo -> open pipe. But any program could "steal" the pipe if it knows the path. But then access wouldnt be possible... No "Leak" but Still unsafe
-    //TODO Need Cap to parent directory? -> Directory cap support needed
+    //TODO Need Cap to parent directory, Ensure path is without / and just create with the given cap?? But then addressing only using caps...
     
     // Split the path into components
     let mut components: Vec<&str> = path.split("/").collect();
@@ -365,6 +365,7 @@ pub fn mkfifo(path: &str, flags: OpenOptions, cap_to_dir:  &Capability<NamingObj
     } else {
         components.join("/") // Joins the remaining components
     };
+    info!("mkfifo: parent dir: {}", parent_dir);
     // Safely lookup the parent directory and create the new pipe
     let result = lookup::lookup_dir(&parent_dir)
         .and_then(|dir| {
@@ -395,7 +396,10 @@ fn open_object(path: &str, flags: OpenOptions, capability_to_dir: &Capability<Na
             Err(e)
         }
     }) {
-        Ok(obj) => Ok(create_naming_capability(obj, flags, None)),
+        Ok(obj) => {
+            info!("opened object at path: {}", path);
+            Ok(create_naming_capability(obj, flags, None))
+        },
         Err(e) => Err(e),
     }
 }

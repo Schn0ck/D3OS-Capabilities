@@ -199,27 +199,38 @@ unsafe extern "C" fn get_capability_entry() -> *const () {
     // info!("Syscall number: {}", syscall_number);
     // Get current thread's CSpace through scheduler
     let current_thread = scheduler().current_thread();
-    
+
     //info!("cspace obj is locked: {}", current_thread.cspace.is_locked());
 
     // Check capability and return function pointer if allowed
-    if let Some(cspace) = current_thread.cspace.invoke() {
-        if let Some(syscall_cap) = cspace.get_syscall_capability(syscall_number as usize) {
-            if syscall_cap.has_permissions(CapabilityFlags::EXECUTE) && let Some(syscall) = syscall_cap.invoke(){
-                // Get the syscall function pointer from the capability
-                let pointer = syscall.function_pointer();
-
-                // Check if the syscall function pointer is valid
-                if !pointer.is_null() {
-                    // Store the function pointer in rax for syscall_disp to call
-                    return pointer;
+    let pointer: *const () = {
+        if let Some(cspace) = current_thread.cspace.invoke() {
+            if let Some(syscall_cap) = cspace.get_syscall_capability(syscall_number as usize) {
+                if syscall_cap.has_permissions(CapabilityFlags::EXECUTE) && let Some(syscall) = syscall_cap.invoke(){
+                    // Get the syscall function pointer from the capability
+                    syscall.function_pointer()
+                } else {
+                    error!("Syscall capability for syscall id [{}] does not have EXECUTE permission!", syscall_number);
+                    permission_denied() as *const ()
                 }
+            } else {
+                error!("Syscall capability for syscall id [{}] does not exist!", syscall_number);
+                permission_denied() as *const ()
             }
+        } else {
+            error!("Could not invoke CSpace for current thread when trying to get syscall capability for syscall id [{}]!", syscall_number);
+            permission_denied() as *const ()
         }
+    };
+
+    // Check if the syscall function pointer is valid
+    if !pointer.is_null() {
+        // Store the function pointer in rax for syscall_disp to call
+        return pointer;
     }
 
     // If we get here, something went wrong
-    error!("System call with id [{}] does not exist or caller has no permission!", syscall_number);
+    error!("Could not get syscall function pointer for syscall id [{}]!", syscall_number);
     permission_denied() as *const ()
     //panic!("Capability for syscall with id [{}] does not exist or has no permission!", syscall_number);
 }

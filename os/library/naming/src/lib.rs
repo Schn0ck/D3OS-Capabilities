@@ -25,6 +25,10 @@ use syscall::{SystemCall, return_vals::Errno, syscall};
 
 pub static ROOT : usize = 0;
 
+pub fn root() -> Result<usize, Errno> {
+    syscall(SystemCall::Root, &[])
+}
+
 pub fn open(path: &str, flags: OpenOptions, dir_handle: usize) -> Result<usize, Errno> {
     match CString::new(path) {
         Ok(c_path) => syscall(SystemCall::Open, &[

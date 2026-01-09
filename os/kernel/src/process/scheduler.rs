@@ -115,6 +115,8 @@ impl Scheduler {
 
     /// Return reference to thread identified by `thread_id`
     pub fn thread(&self, thread_id: usize) -> Option<Arc<Thread>> {
+        info!("Scheduler::thread: Searching for thread id {}", thread_id); 
+        if Self::current(&*self.ready_state.lock()).id() == thread_id { return Some(self.current_thread())}  //todo remove
         self.ready_state.lock().ready_queue
             .iter()
             .find(|thread| thread.id() == thread_id)

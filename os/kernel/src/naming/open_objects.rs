@@ -45,7 +45,7 @@ pub(super) fn open(path: &str, flags: OpenOptions) -> Result<NamedObject, Errno>
         return Err(Errno::ENOENT);
     }
     let found_named_object: NamedObject = result?;
-
+    
     // check if path is a directory and this was requested
     if flags.contains(OpenOptions::DIRECTORY) {
         if !found_named_object.is_dir() {
@@ -53,6 +53,7 @@ pub(super) fn open(path: &str, flags: OpenOptions) -> Result<NamedObject, Errno>
         }
     }
 
+    info!("found named object: {:?}", found_named_object);
     Ok(found_named_object)
     //get_open_object_table().allocate_handle(Arc::new(OpenedObject::new(Arc::new(found_named_object), AtomicUsize::new(0), flags)))
 }
