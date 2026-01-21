@@ -33,11 +33,10 @@ pub enum SystemCall {
     GetSystemTime,
     GetDate, //15
     SetDate,
-    Root,
     Open,
     Read,
-    Write, //20
-    Seek,
+    Write, 
+    Seek, //20
     Close,
     MkDir,
     Touch,

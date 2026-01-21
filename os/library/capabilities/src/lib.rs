@@ -21,6 +21,6 @@ pub fn share_naming_object(thread_id: usize, naming_object_number: usize) -> usi
         Err(e) => {
             print!("Syscall: Share Naming Cap failed with error {}", e as isize);
             return 1;
-        }, //TODO: no panic necessary if no permissions
+        }, 
     }
 }

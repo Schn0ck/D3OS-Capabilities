@@ -64,7 +64,7 @@ pub fn init() {
     //    test::running_tests();
 }
 
-pub(crate) fn root() -> Result<Capability<NamingObject>, Errno> { //Every threat can access Root dir
+/*pub(crate) fn root() -> Result<Capability<NamingObject>, Errno> { //Every threat can access Root dir
     match open_objects::open("/", OpenOptions::all()){
         Ok(root) => {
             Ok(create_naming_capability(root, OpenOptions::all(), None))
@@ -74,6 +74,12 @@ pub(crate) fn root() -> Result<Capability<NamingObject>, Errno> { //Every threat
             Err(e)
         },
     }
+}*/
+
+pub(crate) fn shared_pipe(cap_to_dir: &Capability<NamingObject>) -> Capability<NamingObject> {
+    open_object("shared_pipe", OpenOptions::READWRITE, cap_to_dir).unwrap_or_else(|_| {
+        Capability::null()
+    })
 }
 
 /// Open/create a named object referenced by `path` using the given `flags`. \

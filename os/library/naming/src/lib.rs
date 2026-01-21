@@ -21,13 +21,14 @@ use core::mem;
 
 use shared_types::{DirEntry, FileType, OpenOptions, RawDirent, SeekOrigin};
 use syscall::{SystemCall, return_vals::Errno, syscall};
-
+use terminal::print;
 
 pub static ROOT : usize = 0;
+pub static SHARED_PIPE : usize = 1;
 
-pub fn root() -> Result<usize, Errno> {
+/*pub fn root() -> Result<usize, Errno> {
     syscall(SystemCall::Root, &[])
-}
+}*/
 
 pub fn open(path: &str, flags: OpenOptions, dir_handle: usize) -> Result<usize, Errno> {
     match CString::new(path) {
@@ -141,6 +142,7 @@ pub fn cd(path: &str) -> Result<usize, Errno> {
 }
 
 pub fn mkfifo(path: &str, flags: OpenOptions, dir_handle: usize) -> Result<usize, Errno> {
+    print!("lib::mkfifo called with path: {}, flags: {:?}, dir_handle: {} \n", path, flags, dir_handle);
     match CString::new(path) {
         Ok(c_path) => syscall(SystemCall::Mkfifo, &[c_path.as_bytes().as_ptr() as usize, flags.bits(), dir_handle]),
         Err(_) => Err(Errno::EBADSTR),

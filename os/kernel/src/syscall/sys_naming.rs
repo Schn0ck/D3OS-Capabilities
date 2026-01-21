@@ -25,7 +25,7 @@ use crate::syscall::syscall_dispatcher::init;
     return_vals::convert_syscall_result_to_ret_code(api::open(&unsafe { ptr_to_string(path).unwrap() }, flags))
 }*/
 
-pub unsafe extern "sysv64" fn sys_root(flag_bits: usize) -> isize {
+/*pub unsafe extern "sysv64" fn sys_root(flag_bits: usize) -> isize {
     let flags = OpenOptions::from_bits(flag_bits).unwrap();
 
     return match api::root() {
@@ -41,7 +41,7 @@ pub unsafe extern "sysv64" fn sys_root(flag_bits: usize) -> isize {
         Err(errno) => errno as isize
     }
 }
-
+*/
 pub unsafe extern "sysv64" fn sys_open(path: *const u8, flag_bits: usize, cap_handle: usize) -> isize {
     let current_thread = scheduler().current_thread();
     let flags = OpenOptions::from_bits(flag_bits).unwrap();
@@ -101,13 +101,13 @@ pub unsafe extern "sysv64" fn sys_read(cap_handle: usize, buffer: *mut u8, buffe
     return_vals::convert_syscall_result_to_ret_code(api::write(fh, buf))
 }*/
 
-pub unsafe extern "sysv64" fn sys_write(cap_handle: usize, buffer: *mut u8, buffer_length: usize) -> isize { //todo pagefault when invalid cap
+pub unsafe extern "sysv64" fn sys_write(cap_handle: usize, buffer: *mut u8, buffer_length: usize) -> isize {
     if buffer.is_null() || buffer_length == 0 {
         return Errno::EINVAL as isize;
     }
 
     let current_thread = scheduler().current_thread();
-    let cspace = current_thread.cspace.invoke().unwrap();
+    let cspace = current_thread.cspace.invoke().expect("cspace locked");
     let naming_cap = cspace.get_naming_capability(cap_handle);
 
     // Now we can safely drop the cspace lock and proceed with the read operation
@@ -193,7 +193,7 @@ pub unsafe extern "sysv64" fn sys_mkfifo(path: *const u8, flag_bits: usize, dir_
     let current_thread = scheduler().current_thread();
     let flags = OpenOptions::from_bits(flag_bits).unwrap();
     let path = unsafe { ptr_to_string(path).unwrap() };
-    
+
     info!("sys_mkfifo called with path: {}, flags: {:?}, dir_cap_handle: {}", path, flags, dir_cap_handle);
     
     // Get the capability and release the cspace lock before api call

@@ -12,6 +12,7 @@ use crate::capabilities::capability::Capability;
 use crate::capabilities::capability_objects::naming_object::{create_naming_capability, NamingObject};
 use crate::capabilities::capability_objects::syscall_object::Syscall;
 use crate::naming::{api, lookup};
+use crate::naming::api::shared_pipe;
 use crate::naming::traits::{as_named_object, DirectoryObject, NamedObject};
 use crate::syscall::sys_concurrent::*;
 use crate::syscall::sys_naming::*;
@@ -31,7 +32,7 @@ pub struct CSpace{
     //... other capability types
 }
 
-impl CSpace{ //TODO shared CSpace between all threads in a process?
+impl CSpace{ //TODO shared CSpace between all threads in a process? It is implemented but keep it??
     pub fn new() -> Self {
         let syscall_fns: [*const (); NUM_SYSCALLS] = [
             sys_terminal_read as *const (), //0
@@ -51,31 +52,30 @@ impl CSpace{ //TODO shared CSpace between all threads in a process?
             sys_get_system_time as *const (),
             sys_get_date as *const (), //15
             sys_set_date as *const (),
-            sys_root as *const (),
             sys_open as *const (),
             sys_read as *const (),
-            sys_write as *const (), //20
-            sys_seek as *const (),
+            sys_write as *const (),
+            sys_seek as *const (), //20
             sys_close as *const (),
             sys_mkdir as *const (),
             sys_touch as *const (),
             sys_readdir as *const (),
-            sys_cwd as *const (),
+            sys_cwd as *const (), //25
             sys_cd as *const (),
             sys_sock_open as *const (),
             sys_sock_bind as *const (),
             sys_sock_accept as *const (),
-            sys_sock_connect as *const (),
+            sys_sock_connect as *const (), //30
             sys_sock_send as *const (),
             sys_sock_receive as *const (),
             sys_sock_close as *const (),
             sys_get_ip_adresses as *const (),
-            sys_mkfifo as *const (),
+            sys_mkfifo as *const (), //35
             //caps
             sys_share_syscall_cap as *const (),
             sys_revoke_syscall_cap as *const (),
             sys_share_naming_cap as *const (),
-        ];
+        ]; //TODO individual configuration depending on calling app
         
         let mut num = 0;
         let mut syscall_capabilities: Vec<_> = syscall_fns
@@ -93,9 +93,22 @@ impl CSpace{ //TODO shared CSpace between all threads in a process?
         }
 
         let mut naming_capabilities = Vec::new();
-        naming_capabilities.push(Capability::null()); //Reserve 0 for root
         //check if naming is initialized already
-        //if api::ROOT.is_completed() { naming_capabilities.push(api::root()); }
+        if api::ROOT.is_completed() {
+            if let Some(root) = api::ROOT.get(){
+                let root_cap = create_naming_capability(
+                    as_named_object(
+                        root.root_dir()), 
+                        OpenOptions::all(), 
+                        None);//NamedObject::DirectoryObject(root.root_dir()), OpenOptions::all(), None);
+                let shared_pipe = shared_pipe(&root_cap);
+                naming_capabilities.push(root_cap); //ROOT at index 0
+                naming_capabilities.push(shared_pipe); //SHARED_PIPE at index 1
+            }
+            // naming_capabilities.push(api::root());
+        }
+
+
         
         // if let Some(root) = api::ROOT.get(){ 
         //     let root_cap = create_naming_capability(NamedObject::from(root.root_dir()), OpenOptions::all(), None);//NamedObject::DirectoryObject(root.root_dir()), OpenOptions::all(), None);
@@ -148,14 +161,14 @@ impl CSpace{ //TODO shared CSpace between all threads in a process?
 
         -1
     }
-    
+
     pub fn receive_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{
         if let Some(capability) = capability {
             self.naming_capabilities.push(capability);
             info!("     CSpace: Received naming capability, new length {}", self.naming_capabilities.len());
             return self.naming_capabilities.len() as isize - 1; //panic if len > isize::MAX (9_223_372_036_854_775_808) --> practically impossible
         }
-        
+
         warn!("     CSpace: Failed to receive naming capability");
         -1
     }
@@ -167,7 +180,7 @@ impl CSpace{ //TODO shared CSpace between all threads in a process?
     pub fn get_naming_capability_mut(&mut self, handle: usize) -> Option<&mut Capability<NamingObject>> {
         self.naming_capabilities.get_mut(handle)
     }
-    // 
+    //
     // pub fn debug_print_caps(&self){
     //     info!("CSpace: Dumping syscall capabilities:");
     //     for (i, cap) in self.syscall_capabilities.iter().enumerate(){

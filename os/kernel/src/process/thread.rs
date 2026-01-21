@@ -194,7 +194,7 @@ impl Thread {
         //Copy process CSpace for the user thread
         let mut cspace_cap = Capability::null();
         if let Some(cap) = parent.cspace.share(CapabilityFlags::READ | CapabilityFlags::WRITE | CapabilityFlags::SHARE) {
-            cspace_cap = cap;
+            cspace_cap = cap; //TODO: Thread-Individual CSpace if needed
         }
         
         // create user thread and prepare the stack for starting it later
@@ -202,7 +202,7 @@ impl Thread {
             id: tid,
             stacks: Mutex::new(Stacks::new(kernel_stack, user_stack)),
             process: parent,
-            cspace: cspace_cap,//TODO: create CSpace for user thread, (copy process CSpace)
+            cspace: cspace_cap,
             user_kickoff: kickoff_addr,
             entry,
         };

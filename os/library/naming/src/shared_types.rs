@@ -12,12 +12,13 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 bitflags! {
     /// Description: Option flags for opening objects
     pub struct OpenOptions: usize {
-        const READONLY  = 1;
-        const READWRITE = 2;
-        const CREATE    = 3;
-        const EXCLUSIVE = 4;
-        const DIRECTORY = 5;
-        const WRITEONLY = 6; // relevant for pipes
+        const READONLY  = 1 << 0;
+        const READWRITE = 1 << 1;
+        const CREATE    = 1 << 2;
+        const EXCLUSIVE = 1 << 3;
+        const DIRECTORY = 1 << 4;
+        const WRITEONLY = 1 << 5; // relevant for pipes
+        const SHARE    = 1 << 6;  // relevant for caps
     }
 }
 

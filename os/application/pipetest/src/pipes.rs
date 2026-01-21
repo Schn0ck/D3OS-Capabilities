@@ -3,35 +3,40 @@
 extern crate alloc;
 
 use naming::shared_types::OpenOptions;
-use naming::{close, mkfifo, open, read, root, write, ROOT};
+use naming::{close, mkfifo, open, read, write, ROOT, SHARED_PIPE};
 
 use concurrent::thread;
 #[allow(unused_imports)]
 use runtime::*;
 use terminal::{print, println};
 use capabilities::*;
+use terminal::write::print;
 
 const PIPE: &str = "/mypipe";
 const NR_OF_ITERATIONS: u32 = 6;
 
 fn writer_thread() {
+    thread::sleep(2000); //wait for reader to be ready
+    println!("---writer_thread: start");
     let thread = thread::current().unwrap();
+    let mut buff= [0;1];
+    //let res = read(SHARED_PIPE, &mut buff);
+    let cap_handle = 2; //buff[0] as usize; //receive the cap number
     
-    let cap_handle = 2; //TODO receive number somehow
     
-    println!("writer_thread: got capability handle = {}", cap_handle);
+    println!("---writer_thread: got capability handle = {}", cap_handle);
 
     let mut cnt = 0;
     let mut wbuff: [u8; 1] = [0; 1];
     let mut ch: u8 = b'A'; // start at ASCII 'A'
     loop {
         wbuff[0] = ch;
-        let res = write(cap_handle, &wbuff); //TODO if cap not valid then Page Fault!!
+        let res = write(cap_handle, &wbuff); 
 
         if res.is_err() {
-            println!("writer_thread: write failed, error: {:?}", res);
+            println!("---writer_thread: write failed, error: {:?}", res);
         } else {
-            println!("writer_thread: wrote one byte = '{}'", ch as char);
+            println!("---writer_thread: wrote one byte = '{}'", ch as char);
 
             // Next letter
             ch = if ch == b'Z' {
@@ -48,7 +53,7 @@ fn writer_thread() {
     }
 
     // close(cap_handle);
-    println!("writer_thread: end");
+    println!("---writer_thread: end");
 }
 
 fn reader_thread() {
@@ -59,20 +64,23 @@ fn reader_thread() {
     //     println!("reader_thread: open failed, error: {:?}", res);
     //     return;
     // }
-    let cap_handle = 3; //TODO receive number somehow
+    let mut buff= [0;1];
+    //let res = read(SHARED_PIPE, &mut buff);
+    let cap_handle = 2; // buff[0] as usize; //receive the cap number
+
 
     let mut rbuff: [u8; 1] = [0; 1];
     let mut cnt = 0;
     loop {
         let res = read(cap_handle, &mut rbuff);
         if res.is_err() {
-            println!("reader_thread: read failed, error: {:?}", res);
+            println!("+++reader_thread: read failed, error: {:?}", res);
         } else {
             if rbuff[0].is_ascii() {
                 let ch = rbuff[0] as char;
-                println!("reader_thread: read one byte '{}', read = {}", ch, res.unwrap());
+                println!("+++reader_thread: read one byte '{}', read = {}", ch, res.unwrap());
             } else {
-                println!("reader_thread: read invalid data");
+                println!("+++reader_thread: read invalid data");
             }
         }
         cnt = cnt + 1;
@@ -83,22 +91,18 @@ fn reader_thread() {
     }
 
     // close(cap_handle);
-    println!("reader_thread: end");
+    println!("+++reader_thread: end");
 }
 
 #[unsafe(no_mangle)]
 pub fn main() {
     println!("named pipe demo: start");
 
-    if root().is_err() {
-        return;
-    }
-
     println!("got root capability");
 
     // debug_print_caps(thread::current().unwrap().id());
 
-    let res = mkfifo("/mypipe", OpenOptions::READWRITE, ROOT);
+    let res = mkfifo("/mypipe", OpenOptions::READWRITE | OpenOptions::SHARE, ROOT);
     if res.is_err() {
         println!("mkfifo failed, error: {:?}", res);
         return;
@@ -141,8 +145,11 @@ pub fn main() {
     
     if let Some(w) = writer {
         println!("Starting writer, id {}", w.id());
-        share_syscall(w.id(), 20);
-        share_naming_object(w.id(),pipe_cap); //TODO share cap with custom rights (e.g. readonly on a readwrite cap)
+        let num = share_naming_object(w.id(),pipe_cap); //TODO share cap with custom rights (e.g. readonly on a readwrite cap)
+        println!("Shared pipe cap {} with writer thread {}", num, w.id());
+        let buff= [num as u8];
+        let res = write(SHARED_PIPE, &buff); 
+        println!("Sent pipe cap to writer thread {}", w.id());
         w.join()
     }
 
@@ -153,7 +160,9 @@ pub fn main() {
     });
     
     if let Some(r) = reader {
-        share_naming_object(r.id(),pipe_cap);
+        let num = share_naming_object(r.id(),pipe_cap);
+        let buff= [num as u8];
+        let res = write(SHARED_PIPE, &buff);
         r.join();
     }
 

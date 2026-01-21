@@ -37,6 +37,9 @@ pub fn create_naming_capability(object: NamedObject, rights: OpenOptions, parent
     if rights.contains(OpenOptions::WRITEONLY) || rights.contains(OpenOptions::READWRITE) {
         flags |= CapabilityFlags::WRITE;
     }
+    if rights.contains(OpenOptions::SHARE) {
+        flags |= CapabilityFlags::SHARE;
+    }
 
-    Capability::new(NamingObject::new(object, rights, parent), flags | CapabilityFlags::SHARE) //Todo make it customizable
+    Capability::new(NamingObject::new(object, rights, parent), flags) //Todo make it customizable
 }
