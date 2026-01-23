@@ -38,7 +38,7 @@ pub(super) fn open_object_table_init() {
 }
 
 pub(super) fn open(path: &str, flags: OpenOptions) -> Result<NamedObject, Errno> {
-    info!("opening {}", path);
+    info!("opening '{}'", path);
     // try to open the named object for the given path
     let result = lookup::lookup_named_object(path);
     if result.is_err() {

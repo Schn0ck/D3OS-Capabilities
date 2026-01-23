@@ -14,11 +14,12 @@
    ║ Author: Michael Schoettner, Univ. Duesseldorf, 25.8.2025                ║
    ╚═════════════════════════════════════════════════════════════════════════╝
 */
-
+use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::fmt::Pointer;
+use core::fmt::{Debug, Pointer};
+use core::ptr::read_unaligned;
 use core::sync::atomic::Ordering;
 use log::{error, info, warn};
 use spin::{Mutex, Once};
@@ -77,7 +78,8 @@ pub fn init() {
 }*/
 
 pub(crate) fn shared_pipe(cap_to_dir: &Capability<NamingObject>) -> Capability<NamingObject> {
-    open_object("shared_pipe", OpenOptions::READWRITE, cap_to_dir).unwrap_or_else(|_| {
+    open_shared_pipe("shared_pipe", OpenOptions::READWRITE | OpenOptions::CREATE, cap_to_dir).unwrap_or_else(|_| {
+        error!("could not create shared pipe");
         Capability::null()
     })
 }
@@ -208,7 +210,7 @@ pub fn mkdir(name: &str, parent: Capability<NamingObject>, parent_handle: usize)
         if dir.access_rights.intersects(OpenOptions::CREATE) {
             return dir.named_object.as_dir().and_then(|directory| {
                 if let Ok(obj) = directory.create_dir(name, Mode::new(0)) {
-                    Ok(create_naming_capability(obj, OpenOptions::all(), Some(parent_handle)))
+                    Ok(create_naming_capability(obj, OpenOptions::all(), Some(parent_handle), dir.path.to_string() + "/" + name)) // Successfully created the directory
                 } else { Err(Errno::EACCES) }
             });
         }
@@ -255,16 +257,17 @@ pub fn touch(name: &str, cap: &Capability<NamingObject>) -> Result<Capability<Na
 
     // Safely lookup the parent directory and create the new file
     if let Some(naming_obj) = cap.invoke() {
-        if naming_obj.named_object.is_dir() && naming_obj.access_rights.contains(OpenOptions::CREATE) {
+        if naming_obj.named_object.is_dir() && naming_obj.access_rights.contains(OpenOptions::READWRITE) {
             let result = naming_obj.named_object
                 .as_dir()
                 .and_then(|dir| dir.create_file(name, Mode::new(0))); // Create the file)
                 
 
             return match result {
-                Ok(obj) => Ok(create_naming_capability(obj, OpenOptions::empty(), None)), // Successfully created the file //TODO PARENT
+                Ok(obj) => Ok(create_naming_capability(obj, OpenOptions::all(), None, naming_obj.path.to_string() + "/" + name)), // Successfully created the file //TODO PARENT
                 Err(_) => {
                     // Handle the error here (e.g., logging or returning the error code)
+                    error!("touch: could not create file: {}", name);
                     Err(Errno::ENOTDIR)
                 }
             }
@@ -365,28 +368,41 @@ pub fn mkfifo(path: &str, flags: OpenOptions, cap_to_dir:  &Capability<NamingObj
     // Remove the last component (the name of the new file)
     let new_pipe_name = components.pop();
 
-    // We need parent directory to create the new file
-    let parent_dir = if components.len() == 1 {
-        "/".to_string()
-    } else {
-        components.join("/") // Joins the remaining components
+    let parent_path = {
+        let Some(parent_dir) = cap_to_dir.invoke() else {
+            error!("No Access");
+            return Err(Errno::EACCES);
+        };
+        parent_dir.path.clone()
     };
-    info!("mkfifo: parent dir: {}", parent_dir);
+
+    if let Some(last_slash) = path.rfind('/') {
+        let dir_path = &path[..last_slash]; // Exclude the trailing slash
+        if dir_path != &parent_path[..parent_path.len() - 1] { // Remove trailing slash from parent path
+            // Directory paths don't match exactly
+            error!("Paths don't match: dir_path='{}', parent_dir='{}'", dir_path, &parent_path[..parent_path.len() - 1]);
+            return Err(Errno::EACCES);
+        }
+    }
+
+
+    info!("mkfifo: parent dir: '{}'", parent_path);
     // Safely lookup the parent directory and create the new pipe
-    let result = lookup::lookup_dir(&parent_dir)
+    let result = lookup::lookup_dir(&parent_path)
         .and_then(|dir| {
             new_pipe_name
                 .ok_or(Errno::EINVAL) // Handle missing file name
-                .and_then(|name| dir.create_pipe(name, Mode::new(0))) // Create the pipe
-        })
-        .map(|_| 0); // Convert the success result to 0
-    
+                .and_then(|name| dir.create_pipe(name, Mode::new(0))) // Create the pipe, error if exists -> Good as we dont want to create/open pipe twice
+        });
+
     match result {
         Ok(_) =>{ // Successfully created the pipe
             // Try to open the pipe
-            open_object(path, flags, cap_to_dir)
-        }, 
-        Err(_) => {
+            info!("mkfifo: created pipe at path: '{}'", path);
+            open_object(path, flags, cap_to_dir) //todo  doesnt open???
+        },
+        Err(e) => {
+            error!("mkfifo: could not create pipe at path: '{}', error: {:?}", path, e);
             // Handle the error here (e.g., logging or returning the error code)
             Err(Errno::ENOTDIR)
         }
@@ -395,17 +411,49 @@ pub fn mkfifo(path: &str, flags: OpenOptions, cap_to_dir:  &Capability<NamingObj
 
 
 fn open_object(path: &str, flags: OpenOptions, capability_to_dir: &Capability<NamingObject>) -> Result<Capability<NamingObject>, Errno> {
-    match open_objects::open(path, flags).or_else(|e| {
-        if flags.contains(OpenOptions::CREATE) && e != Errno::EEXIST {
-            touch(path, capability_to_dir).and_then(|_| open_objects::open(path, flags)) //TODO touch with Cap handling???
-        } else {
-            Err(e)
+    if let Some(parent_dir) = capability_to_dir.invoke() {
+        //let path = &*(parent_dir.path.clone() + name); //TODO check if path is correct
+        match open_objects::open(path, flags).or_else(|e| {
+            if flags.contains(OpenOptions::CREATE) && e != Errno::EEXIST {
+                warn!("could not open object at path: {}, error: {:?}. Trying to create it.", path, e);
+                touch(path, capability_to_dir).and_then(|_| open_objects::open(path, flags)) //TODO touch with Cap handling???
+            } else {
+                Err(e)
+            }
+        }) {
+            Ok(obj) => {
+                info!("opened object at path: {}", path);
+                Ok(create_naming_capability(obj, flags, None, path.to_string()))
+            },
+            Err(e) => {
+                Err(e)
+            },
         }
-    }) {
+    } else {
+        warn!("Cap blocked");
+        Err(Errno::EACCES)
+    }
+}
+
+fn open_shared_pipe(name: &str, flags: OpenOptions, capability_to_dir: &Capability<NamingObject>) -> Result<Capability<NamingObject>, Errno> { //only used for shared pipe (temporary
+    let path = if let Some(parent_dir) = capability_to_dir.invoke() {
+        &*(parent_dir.path.clone() + name)
+    } else {
+        return Err(Errno::EACCES);
+    };
+
+    match open_objects::open(path, flags){
         Ok(obj) => {
-            info!("opened object at path: {}", path);
-            Ok(create_naming_capability(obj, flags, None))
+            info!("opened object at path: {}", name);
+            Ok(create_naming_capability(obj, flags, None, "/".to_string() + name))
         },
-        Err(e) => Err(e),
+        Err(e) => {
+            if flags.contains(OpenOptions::CREATE) && e != Errno::EEXIST {
+                warn!("could not open object at path: {}, error: {:?}. Trying to create it.", path, e);
+                mkfifo(path, flags, capability_to_dir) //Problem here
+            } else {
+                Err(e)
+            }
+        },
     }
 }
