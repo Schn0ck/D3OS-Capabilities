@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::ops::{Add, Deref};
 use log::{info, warn};
@@ -75,6 +75,7 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
             sys_share_syscall_cap as *const (),
             sys_revoke_syscall_cap as *const (),
             sys_share_naming_cap as *const (),
+            sys_naming_len as *const (),
         ]; //TODO individual configuration depending on calling app
         
         let mut num = 0;
@@ -99,8 +100,9 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
                 let root_cap = create_naming_capability(
                     as_named_object(
                         root.root_dir()), 
-                        OpenOptions::all(), 
-                        None);//NamedObject::DirectoryObject(root.root_dir()), OpenOptions::all(), None);
+                        OpenOptions::all(),
+                        None,
+                        "/".to_string());//NamedObject::DirectoryObject(root.root_dir()), OpenOptions::all(), None);
                 let shared_pipe = shared_pipe(&root_cap);
                 naming_capabilities.push(root_cap); //ROOT at index 0
                 naming_capabilities.push(shared_pipe); //SHARED_PIPE at index 1
@@ -179,6 +181,10 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
 
     pub fn get_naming_capability_mut(&mut self, handle: usize) -> Option<&mut Capability<NamingObject>> {
         self.naming_capabilities.get_mut(handle)
+    }
+
+    pub fn get_naming_capabilities_len(&self) -> usize {
+        self.naming_capabilities.len()
     }
     //
     // pub fn debug_print_caps(&self){

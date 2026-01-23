@@ -74,4 +74,13 @@ pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, naming_object_numb
     -5
 }
 
+pub extern "sysv64" fn sys_naming_len() -> usize {
+    let cur_thread = scheduler().current_thread();
+    if let Some(cspace) = cur_thread.cspace.invoke(){
+        return cspace.get_naming_capabilities_len();
+    } else {
+        0
+    }
+}
+
 //TODO revoke/delete

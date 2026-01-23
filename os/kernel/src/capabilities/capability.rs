@@ -3,7 +3,7 @@
 
 use alloc::sync::Arc;
 use bitflags::bitflags;
-use log::warn;
+use log::{info, warn};
 use spin::{Mutex, MutexGuard};
 bitflags! {
     #[derive(Clone, Copy)]
@@ -49,7 +49,6 @@ impl<T> Capability<T> {
             warn!("Tried to invoke a capability without READ permission");
             return None;
         }
-
         self.obj.as_ref()?.try_lock()
 
         // if let Some(content) = self.obj.as_ref() {

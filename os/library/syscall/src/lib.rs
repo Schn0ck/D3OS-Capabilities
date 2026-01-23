@@ -55,6 +55,7 @@ pub enum SystemCall {
     ShareSyscallCap,
     RevokeSyscallCap,
     ShareNamingCap,
+    NamingLen,
     // no syscall, just marking last number, see NUM_SYSCALLS
     // insert any new system calls before this marker
     LastEntryMarker,
