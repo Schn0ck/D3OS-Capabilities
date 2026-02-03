@@ -10,18 +10,18 @@ use concurrent::thread;
 use runtime::*;
 use terminal::{print, println};
 use capabilities::*;
+use concurrent::thread::current;
 use terminal::write::print;
 
 const PIPE: &str = "/mypipe";
 const NR_OF_ITERATIONS: u32 = 6;
 
 fn writer_thread() {
-    thread::sleep(2000); //wait for reader to be ready
-    println!("---writer_thread: start");
+    println!("---writer_thread: start, id {}", current().unwrap().id());
     let thread = thread::current().unwrap();
     let mut buff= [0;1];
     //let res = read(SHARED_PIPE, &mut buff);
-    let cap_handle = 2; //buff[0] as usize; //receive the cap number
+    let cap_handle = 3; //buff[0] as usize; //receive the cap number
     
     
     println!("---writer_thread: got capability handle = {}", cap_handle);
@@ -96,7 +96,7 @@ fn reader_thread() {
 
 #[unsafe(no_mangle)]
 pub fn main() {
-    println!("named pipe demo: start");
+    println!("named pipe demo: start, id {}", current().unwrap().id());
 
     println!("got root capability");
 
@@ -123,29 +123,21 @@ pub fn main() {
     }
     println!("");
 
+    share_naming_object(current().unwrap().id(), pipe_cap); //share with self to test
 
-    share_naming_object(thread::current().unwrap().id(), pipe_cap);
-
-    // 
-    // let mut buff: [u8; 1] = [0; 1];
-    // buff[0] = b'A';
-    // let result = write(pipe_cap, &buff);
-    // let mut rbuff: [u8; 1] = [0; 1];
-    // let result2 = read(pipe_cap, &mut rbuff);
-    // 
-    // println!("read result = {}", rbuff[0] as char);
-    // 
-    //Ok up to here
-
-    // debug_print_caps(thread::current().unwrap().id());
-    
     let writer = thread::create(|| {
         writer_thread();
     });
     
     if let Some(w) = writer {
+
         println!("Starting writer, id {}", w.id());
-        let num = share_naming_object(w.id(),pipe_cap); //TODO share cap with custom rights (e.g. readonly on a readwrite cap)
+        let num = share_naming_object(w.id(), pipe_cap); //TODO share cap with custom rights (e.g. readonly on a readwrite cap)
+        if num < 0 {
+            println!("Failed to share pipe cap with writer thread (id {})", w.id());
+            return;
+        }
+
         println!("Shared pipe cap {} with writer thread {}", num, w.id());
         let buff= [num as u8];
         let res = write(SHARED_PIPE, &buff); 

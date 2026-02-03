@@ -84,6 +84,18 @@ pub(crate) fn shared_pipe(cap_to_dir: &Capability<NamingObject>) -> Capability<N
     })
 }
 
+pub(crate) fn root() -> Capability<NamingObject> { //Every threat can access Root dir
+    match open_objects::open("/", OpenOptions::READWRITE | OpenOptions::SHARE){
+        Ok(root) => {
+            create_naming_capability(root, OpenOptions::all(), None, "/".to_string())
+        },
+        Err(e) => {
+            error!("root not found, error: {:?}", e);
+            Capability::null()
+        },
+    }
+}
+
 /// Open/create a named object referenced by `path` using the given `flags`. \
 /// Returns `Ok(object_handle)` or `Err`.
 pub fn open(path: &str, flags: OpenOptions, cap_to_dir: &Capability<NamingObject>) -> Result<Capability<NamingObject>, Errno> {
@@ -120,7 +132,7 @@ pub fn write(cap: &Capability<NamingObject>, buffer: &mut [u8]) -> Result<usize,
             // Make `opened_object` mutable here
             return naming_obj.named_object.as_pipe().and_then(|pipe| {
                 let bytes_written = pipe.write(buffer, 0, naming_obj.access_rights)?;
-                info!("pipe written: {}", bytes_written);
+                info!("pipe written: {:?}, {} byte(s)", buffer, bytes_written);
                 Ok(bytes_written) // Return the bytes written
             });
         }
@@ -256,20 +268,24 @@ pub fn touch(name: &str, cap: &Capability<NamingObject>) -> Result<Capability<Na
     }
 
     // Safely lookup the parent directory and create the new file
-    if let Some(naming_obj) = cap.invoke() {
-        if naming_obj.named_object.is_dir() && naming_obj.access_rights.contains(OpenOptions::READWRITE) {
-            let result = naming_obj.named_object
-                .as_dir()
-                .and_then(|dir| dir.create_file(name, Mode::new(0))); // Create the file)
-                
+    let Some(naming_obj) = cap.invoke() else {
+        error!("touch: could not invoke capability");
+        return Err(Errno::EACCES);
+    };
 
-            return match result {
-                Ok(obj) => Ok(create_naming_capability(obj, OpenOptions::all(), None, naming_obj.path.to_string() + "/" + name)), // Successfully created the file //TODO PARENT
-                Err(_) => {
-                    // Handle the error here (e.g., logging or returning the error code)
-                    error!("touch: could not create file: {}", name);
-                    Err(Errno::ENOTDIR)
-                }
+
+    if naming_obj.named_object.is_dir() && naming_obj.access_rights.contains(OpenOptions::READWRITE) {
+        let result = naming_obj.named_object
+            .as_dir()
+            .and_then(|dir| dir.create_file(name, Mode::new(0))); // Create the file)
+
+
+        return match result {
+            Ok(obj) => Ok(create_naming_capability(obj, OpenOptions::all(), None, naming_obj.path.to_string() + "/" + name)), // Successfully created the file //TODO PARENT
+            Err(_) => {
+                // Handle the error here (e.g., logging or returning the error code)
+                error!("touch: could not create file: {}", name);
+                Err(Errno::ENOTDIR)
             }
         }
     }
@@ -411,27 +427,22 @@ pub fn mkfifo(path: &str, flags: OpenOptions, cap_to_dir:  &Capability<NamingObj
 
 
 fn open_object(path: &str, flags: OpenOptions, capability_to_dir: &Capability<NamingObject>) -> Result<Capability<NamingObject>, Errno> {
-    if let Some(parent_dir) = capability_to_dir.invoke() {
-        //let path = &*(parent_dir.path.clone() + name); //TODO check if path is correct
-        match open_objects::open(path, flags).or_else(|e| {
-            if flags.contains(OpenOptions::CREATE) && e != Errno::EEXIST {
-                warn!("could not open object at path: {}, error: {:?}. Trying to create it.", path, e);
-                touch(path, capability_to_dir).and_then(|_| open_objects::open(path, flags)) //TODO touch with Cap handling???
-            } else {
-                Err(e)
-            }
-        }) {
-            Ok(obj) => {
-                info!("opened object at path: {}", path);
-                Ok(create_naming_capability(obj, flags, None, path.to_string()))
-            },
-            Err(e) => {
-                Err(e)
-            },
+    //let path = &*(parent_dir.path.clone() + name); //TODO check if path is correct
+    match open_objects::open(path, flags).or_else(|e| {
+        if flags.contains(OpenOptions::CREATE) && e != Errno::EEXIST {
+            warn!("could not open object at path: {}, error: {:?}. Trying to create it.", path, e);
+            touch(path, capability_to_dir).and_then(|_| open_objects::open(path, flags)) //TODO touch with Cap handling???
+        } else {
+            Err(e)
         }
-    } else {
-        warn!("Cap blocked");
-        Err(Errno::EACCES)
+    }) {
+        Ok(obj) => {
+            info!("opened object at path: {}", path);
+            Ok(create_naming_capability(obj, flags, None, path.to_string()))
+        },
+        Err(e) => {
+            Err(e)
+        },
     }
 }
 

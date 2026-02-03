@@ -14,13 +14,13 @@ pub fn share_syscall(thread_id: usize, syscall_num: usize) -> bool{
 pub fn revoke(thread_id: usize, syscall_num: usize) {
     let res = syscall(SystemCall::RevokeSyscallCap, &[thread_id, syscall_num]);
 }
-pub fn share_naming_object(thread_id: usize, naming_object_number: usize) -> usize{
+pub fn share_naming_object(thread_id: usize, naming_object_number: usize) -> isize{
     let res = syscall(SystemCall::ShareNamingCap, &[thread_id, naming_object_number]);
     match res {
-        Ok(b) => b,
+        Ok(b) => b as isize,
         Err(e) => {
-            print!("Syscall: Share Naming Cap failed with error {}", e as isize);
-            return 1;
+            println!("Syscall: Share Naming Cap failed with error {}", e as isize);
+            e as isize
         },
     }
 }

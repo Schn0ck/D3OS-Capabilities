@@ -97,12 +97,7 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
         //check if naming is initialized already
         if api::ROOT.is_completed() {
             if let Some(root) = api::ROOT.get(){
-                let root_cap = create_naming_capability(
-                    as_named_object(
-                        root.root_dir()), 
-                        OpenOptions::all(),
-                        None,
-                        "/".to_string());//NamedObject::DirectoryObject(root.root_dir()), OpenOptions::all(), None);
+                let root_cap = api::root();
                 let shared_pipe = shared_pipe(&root_cap);
                 naming_capabilities.push(root_cap); //ROOT at index 0
                 naming_capabilities.push(shared_pipe); //SHARED_PIPE at index 1
@@ -156,17 +151,18 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
     }
 
     pub(crate) fn receive_root_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{
-        if let Some(capability) = capability {
-            self.naming_capabilities[0] = capability;
+        if let Some(cap) = capability {
+            self.naming_capabilities[0] = cap;
             return 0; //panic if len > isize::MAX (9_223_372_036_854_775_808) --> practically impossible
         }
 
         -1
     }
 
-    pub fn receive_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{
-        if let Some(capability) = capability {
-            self.naming_capabilities.push(capability);
+    pub fn receive_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{ //todo warum nochmal receive option
+        if let Some(cap) = capability {
+            info!("     CSpace: Naming capability is none: {}", cap.is_none());
+            self.naming_capabilities.push(cap);
             info!("     CSpace: Received naming capability, new length {}", self.naming_capabilities.len());
             return self.naming_capabilities.len() as isize - 1; //panic if len > isize::MAX (9_223_372_036_854_775_808) --> practically impossible
         }
