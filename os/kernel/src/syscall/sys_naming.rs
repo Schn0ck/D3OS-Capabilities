@@ -11,7 +11,7 @@ use alloc::string::{String, ToString};
 use core::ptr::slice_from_raw_parts;
 use core::str::from_utf8;
 use core::mem;
-use log::{info,warn};
+use log::{error, info, warn};
 use naming::shared_types::{OpenOptions, SeekOrigin, RawDirent};
 use syscall::return_vals::{self, Errno};
 use num_enum::FromPrimitive;
@@ -59,13 +59,18 @@ pub unsafe extern "sysv64" fn sys_open(path: *const u8, flag_bits: usize, cap_ha
                     let handle = cspace.receive_naming_capability(Some(cap));
                     return handle;
                 }
-                return Errno::EACCES as isize;
+                error!("sys_open: failed to reacquire cspace lock to store capability for path {}", path);
+                return Errno::EUNKN as isize; //Return EUNKN so that client doesnt know if it failed or if it existed
             }
-            Err(errno) => return errno as isize
+            Err(errno) => {
+                error!("sys_open: api::open failed for path {}: {:?}", path, errno);
+                return Errno::EUNKN as isize; //Return EUNKN so that client doesnt know if it failed or if it existed
+            }
         }
     }
     
-    Errno::EACCES as isize
+    Errno::EUNKN as isize //Return EUNKN so that client doesnt know if it failed or if it existed
+    //todo make it so that this always takes x seconds to avoid timing attacks. e.g. by sleeping for remaining time
 }
 
 
