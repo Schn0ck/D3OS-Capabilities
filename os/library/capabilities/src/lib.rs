@@ -1,8 +1,10 @@
 #![no_std]
+pub mod capability;
 
 use syscall::{syscall, SystemCall};
 use core::result::Result::{Err, Ok};
 use terminal::{print, println};
+use crate::capability::Capability;
 
 pub fn share_syscall(thread_id: usize, syscall_num: usize) -> bool{
     let res = syscall(SystemCall::ShareSyscallCap, &[thread_id, syscall_num]);
@@ -14,8 +16,8 @@ pub fn share_syscall(thread_id: usize, syscall_num: usize) -> bool{
 pub fn revoke(thread_id: usize, syscall_num: usize) {
     let res = syscall(SystemCall::RevokeSyscallCap, &[thread_id, syscall_num]);
 }
-pub fn share_naming_object(thread_id: usize, naming_object_number: usize) -> isize{
-    let res = syscall(SystemCall::ShareNamingCap, &[thread_id, naming_object_number]);
+pub fn share_naming_object(thread_id: usize, cap: Capability) -> isize{ //todo dont share which handle -> tells caller how many caps
+    let res = syscall(SystemCall::ShareNamingCap, &[thread_id, cap.handle()]);
     match res {
         Ok(b) => b as isize,
         Err(e) => {

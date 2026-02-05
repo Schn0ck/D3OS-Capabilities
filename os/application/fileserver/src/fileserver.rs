@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 use core::result::Result::Ok;
 use core::result::Result;
 use core::option::Option::*;
+use capabilities::capability::Capability;
 use naming::{mkfifo, read, write, ROOT, SHARED_PIPE};
 use naming::shared_types::OpenOptions;
 use syscall::return_vals::Errno;
@@ -33,27 +34,27 @@ enum Response {
 pub struct FileServer {
     files: BTreeMap<FileHandle, Vec<u8>>,
     next_handle: usize,
-    command_pipe_handle: usize,
+    command_pipe: Capability,
 }
 
 impl FileServer {
-    pub(crate) fn new(pipe_handle: usize) -> Result<Self, Errno> {
+    pub(crate) fn new(pipe: Capability) -> Result<Self, Errno> {
         // Create command pipe with read/write/share permissions
-        write(pipe_handle, &[0u8])?;
+        write(pipe, &[0u8])?;
 
         Ok(Self {
             files: BTreeMap::new(),
             next_handle: 1,
-            command_pipe_handle: pipe_handle,
+            command_pipe: pipe,
         })
     }
 
-    pub(crate) fn run(&mut self, pipe_handle: usize) -> Result<(), Errno> {
+    pub(crate) fn run(&mut self) -> Result<(), Errno> {
         let mut cmd_buf = [0u8; 9]; // 1 byte command + 8 bytes data
 
         loop {
             // Read command
-            read(pipe_handle, &mut cmd_buf)?;
+            read(self.command_pipe, &mut cmd_buf)?;
 
             match cmd_buf[0] {
                 // Write command
@@ -67,7 +68,7 @@ impl FileServer {
 
 
                     let mut data = vec![0u8; size];
-                    read(self.command_pipe_handle, &mut data)?;
+                    read(self.command_pipe, &mut data)?;
                     content.extend_from_slice(&data);
 
                     let handle = self.next_handle + 1;
@@ -75,7 +76,7 @@ impl FileServer {
 
                     // Send back handle
                     let response = handle.to_le_bytes();
-                    write(self.command_pipe_handle, &response)?;
+                    write(self.command_pipe, &response)?;
                 }
 
                 // Read command
@@ -89,13 +90,13 @@ impl FileServer {
                     if let Some(content) = self.files.get(&handle) {
                         // Send size first
                         let size = content.len() as u64;
-                        write(self.command_pipe_handle, &size.to_le_bytes())?;
+                        write(self.command_pipe, &size.to_le_bytes())?;
 
                         // Then send content
-                        write(self.command_pipe_handle, content)?;
+                        write(self.command_pipe, content)?;
                     } else {
                         // Send 0 size to indicate error
-                        write(self.command_pipe_handle, &0u64.to_le_bytes())?;
+                        write(self.command_pipe, &0u64.to_le_bytes())?;
                     }
                 }
 
@@ -108,10 +109,10 @@ impl FileServer {
 
 fn server_thread() {
     let naming_len = capabilities::get_naming_len(); //todo: this wont work if multiple naming caps are added quickly
-    let mut server = FileServer::new(naming_len)
+    let mut server = FileServer::new(Capability::new(naming_len))
         .expect("Failed to create file server");
     println!("File server thread started for pipe at {}", naming_len);
-    if let Err(e) = server.run(naming_len) {
+    if let Err(e) = server.run() {
         println!("File server error: {:?}", e);
     }
 

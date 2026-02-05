@@ -3,6 +3,7 @@ extern crate alloc;
 
 use alloc::vec;
 use alloc::vec::Vec;
+use capabilities::capability::Capability;
 use naming::shared_types::OpenOptions;
 use naming::{mkfifo, read, write, ROOT};
 use naming::{SHARED_PIPE};
@@ -14,8 +15,10 @@ use terminal::{print};
 
 type FileHandle = usize;
 
+#[derive(Copy, Clone)]
+
 pub struct FileClient {
-    pipe_cap: usize,
+    pipe_cap: Capability,
 }
 
 impl FileClient {
@@ -27,7 +30,7 @@ impl FileClient {
             return None;
         };
 
-        print!("---fileclient: created client pipe with cap = {}\n", pipe);
+        print!("---fileclient: created client pipe with cap = {}\n", pipe.handle());
 
         let mut thread_id = [1u8];
         let mut ack = [0u8; 1];
@@ -44,7 +47,7 @@ impl FileClient {
         Some(FileClient { pipe_cap: pipe })
     }
 
-    pub fn write_file(&mut self, content: &[u8]) -> Result<FileHandle, Errno> {
+    pub fn write_file(&self, content: &[u8]) -> Result<FileHandle, Errno> {
         // Prepare command buffer: command byte + content length
         let mut cmd = [0u8; 9];
         cmd[0] = 1; // Write command
@@ -68,7 +71,7 @@ impl FileClient {
         Ok(unsafe { *(handle_buf.as_ptr() as *const usize) }.to_le())
     }
 
-    pub fn read_file(&mut self, handle: FileHandle) -> Result<Vec<u8>, Errno> {
+    pub fn read_file(&self, handle: FileHandle) -> Result<Vec<u8>, Errno> {
         // Prepare command buffer: command byte + file handle
         let mut cmd = [0u8; 9];
         cmd[0] = 2; // Read command
