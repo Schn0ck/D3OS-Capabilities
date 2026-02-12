@@ -80,7 +80,7 @@ pub unsafe extern "sysv64" fn sys_read(cap_handle: usize, buffer: *mut u8, buffe
     }
 
     let current_thread = scheduler().current_thread();
-    
+
     // Get the naming capability while holding the cspace lock
     let cspace = current_thread.cspace.invoke().unwrap();
     let naming_cap = cspace.get_naming_capability(cap_handle);
@@ -106,7 +106,7 @@ pub unsafe extern "sysv64" fn sys_read(cap_handle: usize, buffer: *mut u8, buffe
     return_vals::convert_syscall_result_to_ret_code(api::write(fh, buf))
 }*/
 
-pub unsafe extern "sysv64" fn sys_write(cap_handle: usize, buffer: *mut u8, buffer_length: usize) -> isize {
+pub unsafe extern "sysv64" fn sys_write(cap_handle: usize, buffer: *const u8, buffer_length: usize) -> isize {
     if buffer.is_null() || buffer_length == 0 {
         return Errno::EINVAL as isize;
     }
@@ -117,7 +117,7 @@ pub unsafe extern "sysv64" fn sys_write(cap_handle: usize, buffer: *mut u8, buff
 
     // Now we can safely drop the cspace lock and proceed with the read operation
     if let Some(cap) = naming_cap {
-        let buf = unsafe { slice::from_raw_parts_mut(buffer, buffer_length) };
+        let buf = unsafe { slice::from_raw_parts(buffer, buffer_length) };
         return return_vals::convert_syscall_result_to_ret_code(api::write(&cap, buf));
     }
 

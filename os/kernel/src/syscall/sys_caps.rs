@@ -53,7 +53,8 @@ pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, naming_object_numb
             if let Some(naming_cap) = sharer_cspace.get_naming_capability(naming_object_number) {
                 info!(" sharing naming cap: found naming cap in sharer cspace");
                 if naming_cap.is_none() { warn!( "sharing naming cap: naming cap is none") }
-                naming_cap.share(naming_cap.get_permissions())
+                let perms = naming_cap.get_permissions();
+                naming_cap.share(perms)
             } else {
                 error!(" sharing naming cap: naming cap not found in sharer cspace");
                 return -5;
@@ -88,4 +89,39 @@ pub extern "sysv64" fn sys_naming_len() -> usize {
     }
 }
 
-//TODO revoke/delete
+///revokes a shared naming capability from a thread's cspace completely
+pub extern "sysv64" fn sys_revoke_naming_cap(thread_id: usize, naming_object_number: usize) -> isize {
+    //check if caller shared the cap with the thread and revoke it from there
+    let current_thread = scheduler().current_thread();
+    let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
+    let capa =  cspace.get_naming_capability(naming_object_number);
+
+
+    if let Some(cap) = capa {
+        if let Some(receiver_thread) = scheduler().thread(thread_id){
+            if let Some(mut cspace) = receiver_thread.cspace.invoke(){
+                cspace.revoke_naming_capability(cap);
+                return 0;
+            }
+        }
+    }
+    
+    -5
+}
+
+///revokes specific rights from a shared naming capability from a thread's cspace
+pub extern "sysv64" fn sys_revoke_naming_rights(thread_id: usize, naming_object_number: usize, rights: usize) -> isize {
+    let current_thread = scheduler().current_thread();
+    let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
+    let capa =  cspace.get_naming_capability(naming_object_number);
+
+
+    if let Some(cap) = capa {
+        if let Some(receiver_thread) = scheduler().thread(thread_id){
+            if let Some(mut cspace) = receiver_thread.cspace.invoke(){
+                return cspace.revoke_naming_rights(cap, CapabilityFlags::from_bits(rights as u32).unwrap_or_else(|| { CapabilityFlags::empty() })); //if invalid rights provided, treat as empty rights -> no revocation
+            }
+        }
+    }
+    -5
+}

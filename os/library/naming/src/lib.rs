@@ -31,13 +31,13 @@ pub static SHARED_PIPE : Capability = Capability::new(1);
     syscall(SystemCall::Root, &[])
 }*/
 
-pub fn open(path: &str, flags: OpenOptions, dir_handle: usize) -> Result<Capability, Errno> {
+pub fn open(path: &str, flags: OpenOptions, dir_handle: Capability) -> Result<Capability, Errno> {
     match CString::new(path) {
         Ok(c_path) => {
             match syscall(SystemCall::Open, &[
                 c_path.as_bytes().as_ptr() as usize,
                 flags.bits(),
-                dir_handle,
+                dir_handle.handle(),
             ]) {
                 Ok(cap_handle) => Ok(Capability::new(cap_handle)),
                 Err(e) => Err(e),
@@ -67,10 +67,10 @@ pub fn seek(cap: Capability, offset: usize, origin: SeekOrigin) -> Result<usize,
 //     syscall(SystemCall::Close, &[cap.handle()])
 // }
 
-pub fn mkdir(path: &str, dir_handle: usize) -> Result<Capability, Errno> {
+pub fn mkdir(path: &str, dir_handle: Capability) -> Result<Capability, Errno> {
     match CString::new(path) {
         Ok(c_path) => {
-            match syscall(SystemCall::MkDir, &[c_path.as_bytes().as_ptr() as usize, dir_handle]){
+            match syscall(SystemCall::MkDir, &[c_path.as_bytes().as_ptr() as usize, dir_handle.handle()]){
                 Ok(cap_handle) => Ok(Capability::new(cap_handle)),
                 Err(e) => Err(e),
             }
@@ -79,10 +79,10 @@ pub fn mkdir(path: &str, dir_handle: usize) -> Result<Capability, Errno> {
     }
 }
 
-pub fn touch(path: &str, dir_handle: usize) -> Result<Capability, Errno> { //todo check how that works with current system
+pub fn touch(path: &str, dir_handle: Capability) -> Result<Capability, Errno> { //todo check how that works with current system
     match CString::new(path) {
         Ok(c_path) => {
-            match syscall(SystemCall::Touch, &[c_path.as_bytes().as_ptr() as usize, dir_handle]){
+            match syscall(SystemCall::Touch, &[c_path.as_bytes().as_ptr() as usize, dir_handle.handle()]){
                 Ok(cap_handle) => Ok(Capability::new(cap_handle)),
                 Err(e) => Err(e),
             }
@@ -91,10 +91,10 @@ pub fn touch(path: &str, dir_handle: usize) -> Result<Capability, Errno> { //tod
     }
 }
 
-pub fn readdir(fh: usize) -> Result<Option<DirEntry>, Errno> { //todo check
+pub fn readdir(fh: Capability) -> Result<Option<DirEntry>, Errno> { //todo check
     let mut raw_dirent = RawDirent::new();
     let ret = syscall(SystemCall::Readdir, &[
-        fh,
+        fh.handle(),
         raw_dirent.as_mut_ptr() as usize,
         mem::size_of::<RawDirent>(),
     ]);

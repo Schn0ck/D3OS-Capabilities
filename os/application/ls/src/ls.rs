@@ -4,7 +4,7 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use naming::cwd;
+use naming::{cwd, ROOT};
 
 use naming::shared_types::{DirEntry, FileType, OpenOptions};
 #[allow(unused_imports)]
@@ -28,7 +28,7 @@ fn print_dir_entry(dentry: DirEntry) {
 fn process_ls(path: &str) {
     todo!("Implement Cap handling");
     // open directory
-    let res = naming::open(path, OpenOptions::DIRECTORY, 0);
+    let res = naming::open(path, OpenOptions::DIRECTORY, ROOT);
     if res.is_err() {
         print_usage();
         return;
@@ -50,7 +50,7 @@ fn process_ls(path: &str) {
     }
 
     // close directory
-    naming::close(fd).expect("Failed to close directory");
+    //naming::close(fd).expect("Failed to close directory");
 }
 
 pub fn args_to_vec() -> Vec<String> {

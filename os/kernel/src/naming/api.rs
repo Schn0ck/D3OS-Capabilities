@@ -117,7 +117,7 @@ pub fn write(object_handle: usize, buffer: &[u8]) -> Result<usize, Errno> {
 }
  */
 
-pub fn write(cap: &Capability<NamingObject>, buffer: &mut [u8]) -> Result<usize, Errno> {
+pub fn write(cap: &Capability<NamingObject>, buffer: &[u8]) -> Result<usize, Errno> {
     if let Some(naming_obj) = cap.invoke() {
         if naming_obj.named_object.is_file() {
             // Make `opened_object` mutable here
@@ -170,7 +170,7 @@ pub fn read(cap: &Capability<NamingObject>, buffer: &mut [u8]) -> Result<usize, 
             });
         }
         Err(Errno::ENOTSUP)
-        
+
     } else {
         Err(Errno::EACCES)
     }

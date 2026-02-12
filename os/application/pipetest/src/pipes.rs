@@ -3,13 +3,14 @@
 extern crate alloc;
 
 use naming::shared_types::OpenOptions;
-use naming::{close, mkfifo, open, read, write, ROOT, SHARED_PIPE};
+use naming::{mkfifo, open, read, write, ROOT, SHARED_PIPE};
 
 use concurrent::thread;
 #[allow(unused_imports)]
 use runtime::*;
 use terminal::{print, println};
 use capabilities::*;
+use capabilities::capability::Capability;
 use concurrent::thread::current;
 use terminal::write::print;
 
@@ -21,17 +22,17 @@ fn writer_thread() {
     let thread = thread::current().unwrap();
     let mut buff= [0;1];
     //let res = read(SHARED_PIPE, &mut buff);
-    let cap_handle = 3; //buff[0] as usize; //receive the cap number
+    let cap = Capability::new(3); //buff[0] as usize; //receive the cap number //TODO receive
     
     
-    println!("---writer_thread: got capability handle = {}", cap_handle);
+    println!("---writer_thread: got capability handle = {:?}", cap);
 
     let mut cnt = 0;
     let mut wbuff: [u8; 1] = [0; 1];
     let mut ch: u8 = b'A'; // start at ASCII 'A'
     loop {
         wbuff[0] = ch;
-        let res = write(cap_handle, &wbuff); 
+        let res = write(cap, &wbuff);
 
         if res.is_err() {
             println!("---writer_thread: write failed, error: {:?}", res);
@@ -66,13 +67,13 @@ fn reader_thread() {
     // }
     let mut buff= [0;1];
     //let res = read(SHARED_PIPE, &mut buff);
-    let cap_handle = 2; // buff[0] as usize; //receive the cap number
+    let cap = Capability::new(2); // buff[0] as usize; //receive the cap number
 
 
     let mut rbuff: [u8; 1] = [0; 1];
     let mut cnt = 0;
     loop {
-        let res = read(cap_handle, &mut rbuff);
+        let res = read(cap, &mut rbuff);
         if res.is_err() {
             println!("+++reader_thread: read failed, error: {:?}", res);
         } else {
@@ -108,7 +109,7 @@ pub fn main() {
         return;
     }
     let pipe_cap = res.unwrap();
-    println!("mkfifo: ok, cap_handle = {}", pipe_cap);
+    println!("mkfifo: ok, cap_handle = {:?}", pipe_cap);
 
     write(pipe_cap, b"Hello from main thread!").unwrap();
     let buf = &mut [0u8; 23];

@@ -53,8 +53,8 @@ pub fn main() {
     }
     println!("");
 
-    let close_res = naming::close(fd);
-    println!("close result = {:?}", close_res);
+    // let close_res = naming::close(fd);
+    // println!("close result = {:?}", close_res);
 
     let res = naming::mkdir("/test", ROOT);
     println!("created dir '/test' = {:?}", res);
@@ -93,8 +93,8 @@ pub fn main() {
         }
     }
 
-    let close_res = naming::close(fd);
-    println!("close result = {:?}", close_res);
+    // let close_res = naming::close(fd);
+    // println!("close result = {:?}", close_res);
 
     println!("naming test: end");
 }

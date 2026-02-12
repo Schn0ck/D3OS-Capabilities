@@ -44,7 +44,7 @@ pub fn main() {
         return;
     }
     let cap_handle = res.unwrap();
-    println!("open file '/file.txt', cap_handle = {}", cap_handle);
+    println!("open file '/file.txt', cap_handle = {:?}", cap_handle);
 
     // writing to file
     let buff = "Hello, World!".as_bytes();
@@ -78,8 +78,8 @@ pub fn main() {
     }
     println!("");
 
-    let close_res = naming::close(cap_handle);
-    println!("close result = {:?}", close_res);
+    //let close_res = naming::close(cap_handle);
+    //println!("close result = {:?}", close_res);
 
     let res = naming::mkdir("/test", ROOT);
     println!("created dir '/test' = {:?}", res);
@@ -118,8 +118,8 @@ pub fn main() {
         }
     }
 
-    let close_res = naming::close(fd);
-    println!("close result = {:?}", close_res);
+    //let close_res = naming::close(fd);
+    //println!("close result = {:?}", close_res);
 
     println!("naming test: end");
 }
