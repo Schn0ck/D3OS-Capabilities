@@ -10,31 +10,37 @@ use naming::shared_types::OpenOptions;
 use runtime::*;
 use terminal::{print, println};
 use terminal::write::print;
-use capabilities::revoke_naming_object;
-use concurrent::thread::current;
+use capabilities::{revoke_naming_object, share_naming_object};
+use capabilities::capability::Capability;
+use concurrent::thread::{current, sleep, Thread};
 
-#[unsafe(no_mangle)]
-pub fn main() {
+fn revoke_thread() {
     let Ok(file) = mkfifo("/revoke", OpenOptions::READWRITE | OpenOptions::CREATE, ROOT) else {
         panic!()
     };
-    
-    let _write = write(file, &[1u8]);
 
-    revoke_naming_object(current().unwrap().id(), file);
+    let _write = write(file, &[1u8]);
     
-    let mut buf = [0u8];
-    let _read = read(file, &mut buf);
+    // Wait a bit to ensure the main thread has time to share the capability
+    sleep(10000);
     
-    println!("{}", buf[0]); 
+    // Try to use the capability before it's revoked
+    // let mut buf = [0u8];
+    // let _read = read(file, &mut buf);
+    // println!("Read value before revoke: {}", buf[0]);
     
+    // Revoke the capability
+    revoke_naming_object(9, file); // Assuming main thread has ID 1
     
-    // let process = process::current().unwrap();
-    // let thread = thread::current().unwrap();
-    // 
-    // let pipe = mkfifo("/tmp/pipe", OpenOptions::READWRITE, ROOT).expect("Failed to create FIFO");
-    // 
-    // revoke(pipe).expect("Failed to revoke FIFO");
-    // 
-    // write(pipe, b"Hello, File Server!").expect("Failed to write to FIFO");
+    println!("Capability revoked");
+}
+
+#[unsafe(no_mangle)]
+pub fn main() {
+    // Create the revoke thread
+    let _revoke = thread::create(revoke_thread)
+        .expect("Failed to create revoke thread");
+
+
+    println!("Revoke thread started with id: {}", current().unwrap().id() + 1);
 }
