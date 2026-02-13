@@ -93,11 +93,18 @@ pub extern "sysv64" fn sys_naming_len() -> usize {
 pub extern "sysv64" fn sys_revoke_naming_cap(thread_id: usize, naming_object_number: usize) -> isize {
     //check if caller shared the cap with the thread and revoke it from there
     let current_thread = scheduler().current_thread();
-    let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
-    let capa =  cspace.get_naming_capability(naming_object_number);
 
+    // Special case: if thread is revoking from itself, handle it directly
+    if thread_id == scheduler().current_thread().id() {
+        let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
+        if let Some(cap) = cspace.get_naming_capability_mut(naming_object_number) {
+            cap.revoke();
+            return 0;
+        }
+    } else {
+        let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
+        let Some(cap) =  cspace.get_naming_capability(naming_object_number) else { return -5 };
 
-    if let Some(cap) = capa {
         if let Some(receiver_thread) = scheduler().thread(thread_id){
             if let Some(mut cspace) = receiver_thread.cspace.invoke(){
                 cspace.revoke_naming_capability(cap);
@@ -106,6 +113,7 @@ pub extern "sysv64" fn sys_revoke_naming_cap(thread_id: usize, naming_object_num
         }
     }
     
+
     -5
 }
 

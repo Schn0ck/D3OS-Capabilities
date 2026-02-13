@@ -21,6 +21,7 @@ pub struct Capability<T> {
     obj: Option<Arc<Mutex<T>>>,
     flags: CapabilityFlags,
     shared_to: Mutex<Vec<Weak<Capability<T>>>>, // Reference to the capability that shared this one
+    original: bool,
 }
 
 impl<T> Capability<T> {
@@ -36,6 +37,7 @@ impl<T> Capability<T> {
             obj: Some(Arc::new(Mutex::new(obj))),
             flags,
             shared_to: Mutex::new(Vec::new()), 
+            original: true
         }
     }
 
@@ -45,6 +47,10 @@ impl<T> Capability<T> {
 
     pub fn get_permissions(&self) -> CapabilityFlags {
         self.flags
+    }
+    
+    pub fn is_original(&self) -> bool {
+        self.original
     }
     
     pub fn invoke(&self) -> Option<MutexGuard<'_, T>> {
@@ -69,6 +75,7 @@ impl<T> Capability<T> {
                 obj: Some(Arc::clone(arc)),
                 flags: new_flags & self.flags,
                 shared_to: Mutex::new(Vec::new()),
+                original: false
             };
 
             // Store weak reference to the new capability
@@ -141,6 +148,7 @@ impl<T> Capability<T> {
                         obj: self.obj.clone(),
                         flags: self.flags.clone() | other.flags.clone(),
                         shared_to: Mutex::new(merged_shared_to), //if combining original capability's lineage is kept
+                        original: self.original | other.original, //if one of them is original the combined cap is also original
                     });
                 }
             }
@@ -183,7 +191,7 @@ impl<T> Capability<T> {
     }
 
     pub fn null() -> Self {
-        Self { obj: None, flags: CapabilityFlags::empty(), shared_to: Mutex::new(Vec::new()) }
+        Self { obj: None, flags: CapabilityFlags::empty(), shared_to: Mutex::new(Vec::new()), original: true }
     }
     
     pub fn syscall(obj: T) -> Self {
@@ -197,6 +205,7 @@ impl<T> Clone for Capability<T> { //Only used for the shared_to chain
             obj: self.obj.as_ref().map(Arc::clone),
             flags: self.flags,
             shared_to: Mutex::new(self.shared_to.try_lock().unwrap().clone()),
+            original: self.original,
         }
     }
 
@@ -204,5 +213,6 @@ impl<T> Clone for Capability<T> { //Only used for the shared_to chain
         self.obj = source.obj.as_ref().map(Arc::clone);
         self.flags = source.flags;
         self.shared_to = Mutex::new(source.shared_to.try_lock().unwrap().clone());
+        self.original = source.original;
     }
 }

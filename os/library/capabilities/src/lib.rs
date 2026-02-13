@@ -34,13 +34,21 @@ pub fn share_naming_object(thread_id: usize, cap: Capability) -> isize{ //todo d
     }
 }
 
-pub fn get_naming_len() -> usize{
-    let res = syscall(SystemCall::NamingLen, &[]);
+pub fn revoke_naming_object(thread_id: usize, cap: Capability) -> isize{
+    let res = syscall(SystemCall::RevokeNamingCap, &[thread_id, cap.handle()]);
     match res {
-        Ok(b) => b,
+        Ok(b) => b as isize,
         Err(e) => {
-            print!("Syscall: Get Naming Len failed with error {}", e as isize);
-            return 0;
+            println!("Syscall: Revoke Naming Cap failed with error {}", e as isize);
+            e as isize
         },
     }
+}
+
+pub fn get_naming_len() -> usize {
+    let res = syscall(SystemCall::NamingLen, &[]);
+    res.unwrap_or_else(|e| {
+        println!("Syscall: Get Naming Len failed with error {}", e as isize);
+        0
+    })
 }

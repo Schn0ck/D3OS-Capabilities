@@ -75,6 +75,7 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
             sys_share_syscall_cap as *const (),
             sys_revoke_syscall_cap as *const (),
             sys_share_naming_cap as *const (),
+            sys_revoke_naming_cap as *const (),
             sys_naming_len as *const (),
         ]; //TODO individual configuration depending on calling app
         
@@ -198,9 +199,10 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
     /// check if the object from the provided capability is stored and if it was shared by the provided capability, if yes then revoke the cap, otherwise do nothing
     pub fn revoke_naming_capability(&mut self, cap: &Capability<NamingObject>){
         //check if any object from provided cap is stored and if yes then revoke the cap, otherwise do nothing
+        info!("revoke_naming_capability: cap is original: {}, cap was shared to capability: {}", cap.is_original(), cap.was_shared_to(&self.naming_capabilities[0]));
         if let Some(pos) = self.naming_capabilities.iter_mut().position(|c| c.points_to_same_object(cap)) {
             let capability = self.naming_capabilities.get_mut(pos).unwrap();
-            if cap.was_shared_to(capability) {
+            if cap.was_shared_to(capability) || cap.is_original() {
                 capability.revoke();
             }
         } else {
@@ -219,7 +221,7 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
         //check if any object from provided cap is stored and if yes then revoke the cap, otherwise do nothing
         if let Some(pos) = self.naming_capabilities.iter_mut().position(|c| c.points_to_same_object(cap)) {
             let capability = self.naming_capabilities.get_mut(pos).unwrap();
-            if cap.was_shared_to(capability) {
+            if cap.was_shared_to(capability) || cap.is_original() {
                 capability.revoke_rights(rights);
                 return 0;
             }
