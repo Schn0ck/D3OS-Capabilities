@@ -11,21 +11,35 @@ use naming::shared_types::OpenOptions;
 use runtime::*;
 use terminal::{print, println};
 use terminal::write::print;
-use capabilities::{revoke_naming_object, share_naming_object};
+use capabilities::{get_naming_len, revoke_naming_object, share_naming_object};
 use capabilities::capability::Capability;
 use concurrent::thread::{sleep, Thread, current};
 #[unsafe(no_mangle)]
 pub fn main() {
-    let file = Capability::new(2);
+    let file = Capability::new(get_naming_len() - 1);
+    let mut buf = [0u8; 4];
 
-    sleep(10000);
+    sleep(1000);
 
-    write(file, "Hello World!\n".as_ref());
+    let res = write(file, "Hello".as_ref());
+    if res.is_err() {
+        println!("write error = {:?}", res);
+    } else {
+        println!("write successful");
+    }
 
-    sleep(10000);
+    //sleep(1000);
 
-    let mut buf = [0u8; 12];
-    read(file, &mut buf);
+    let res = read(file, &mut buf);
 
-    println!("{:?}", String::from_utf8_lossy(&buf[..]))
+    if res.is_err() {//todo doesnt print anything
+        println!("read error = {:?}", res);
+    } else {
+        print!("read success:");
+        println!("{:?}", &buf)
+    }
+
+    loop {
+        println!("end");
+    }
 }
