@@ -42,28 +42,24 @@ use crate::syscall::syscall_dispatcher::init;
     }
 }
 */
-pub unsafe extern "sysv64" fn sys_open(path: *const u8, flag_bits: usize, cap_handle: usize) -> isize {
+pub extern "sysv64" fn sys_open(cap_handle: usize, flag_bits: usize) -> isize {
     let current_thread = scheduler().current_thread();
     let flags = OpenOptions::from_bits(flag_bits).unwrap();
-    let path = unsafe { ptr_to_string(path).unwrap() };
-    let cspace = current_thread.cspace.invoke().unwrap();
+    let mut cspace = current_thread.cspace.invoke().unwrap();
     let naming_cap = cspace.get_naming_capability(cap_handle);
 
     if let Some(cap) = naming_cap {
-        match api::open(&*path, flags, &cap) {
+        match api::open(flags, &cap) {
             Ok(cap) => {
-                // Store capability in current thread's CSpace
-                if let Some(mut cspace) = scheduler().current_thread().cspace.invoke() {
+                info!("sys_open succeeded, storing new capability");
                     // Store the capability and return its handle
-                    // Implementation depends on your CSpace management
-                    let handle = cspace.receive_naming_capability(Some(cap));
-                    return handle;
-                }
-                error!("sys_open: failed to reacquire cspace lock to store capability for path {}", path);
+                let handle = cspace.receive_open_naming_capability(Some(cap));
+                return handle;
+                error!("Could not store cap");
                 return Errno::EUNKN as isize; //Return EUNKN so that client doesnt know if it failed or if it existed
             }
             Err(errno) => {
-                error!("sys_open: api::open failed for path {}: {:?}", path, errno);
+                error!("sys_open failed: {:?}", errno);
                 return Errno::EUNKN as isize; //Return EUNKN so that client doesnt know if it failed or if it existed
             }
         }
@@ -83,10 +79,10 @@ pub unsafe extern "sysv64" fn sys_read(cap_handle: usize, buffer: *mut u8, buffe
 
     // Get the naming capability while holding the cspace lock
     let cspace = current_thread.cspace.invoke().unwrap();
-    let naming_cap = cspace.get_naming_capability(cap_handle);
+    let open_naming_cap = cspace.get_open_naming_capability(cap_handle);
 
     // Now we can safely drop the cspace lock and proceed with the read operation
-    if let Some(cap) = naming_cap {
+    if let Some(cap) = open_naming_cap {
         let buf = unsafe { slice::from_raw_parts_mut(buffer, buffer_length) };
         return return_vals::convert_syscall_result_to_ret_code(api::read(&cap, buf));
     }
@@ -113,10 +109,10 @@ pub unsafe extern "sysv64" fn sys_write(cap_handle: usize, buffer: *const u8, bu
 
     let current_thread = scheduler().current_thread();
     let cspace = current_thread.cspace.invoke().expect("cspace locked");
-    let naming_cap = cspace.get_naming_capability(cap_handle);
+    let open_naming_cap = cspace.get_open_naming_capability(cap_handle);
 
     // Now we can safely drop the cspace lock and proceed with the read operation
-    if let Some(cap) = naming_cap {
+    if let Some(cap) = open_naming_cap {
         let buf = unsafe { slice::from_raw_parts(buffer, buffer_length) };
         return return_vals::convert_syscall_result_to_ret_code(api::write(&cap, buf));
     }
@@ -142,11 +138,17 @@ pub extern "sysv64" fn sys_seek(cap_handle: usize, offset: usize, origin: usize)
 
 pub extern "sysv64" fn sys_close(cap_handle: usize) -> isize {
     let current_thread = scheduler().current_thread();
-    let cspace = current_thread.cspace.invoke().unwrap();
-    let naming_cap = cspace.get_naming_capability(cap_handle);
+    let mut cspace = current_thread.cspace.invoke().unwrap();
+    let open_naming_cap = cspace.get_open_naming_capability(cap_handle);
 
-    if let Some(cap) = naming_cap {
-        return return_vals::convert_syscall_result_to_ret_code(api::close(&cap));
+    if let Some(cap) = open_naming_cap {
+        match api::close(&cap) { 
+            Ok(_) => {
+                // Remove the capability from the current thread's CSpace
+                cspace.close_open_naming_capability(cap_handle);
+            },
+            Err(errno) => return errno as isize,
+        }
     }
     Errno::EACCES as isize
 }
@@ -178,7 +180,7 @@ pub unsafe extern "sysv64" fn sys_touch(path: *const u8, cap_handle: usize) -> i
     let naming_cap = cspace.get_naming_capability(cap_handle);
 
     if let Some(cap) = naming_cap {
-        match api::touch(&*path, &cap) {
+        match api::touch(&*path, &cap, cap_handle) {
             Ok(cap) => {
                 // Store capability in current thread's CSpace
                 if let Some(mut cspace) = scheduler().current_thread().cspace.invoke() {

@@ -16,23 +16,26 @@ use capabilities::capability::Capability;
 use concurrent::thread::{current, sleep, Thread};
 
 fn revoke_thread() {
-    sleep(100);
-    let Ok(file) = mkfifo("/revoke", OpenOptions::READWRITE | OpenOptions::CREATE, ROOT) else {
+    let Ok(file) = mkfifo("/revoke", OpenOptions::READWRITE | OpenOptions::CREATE | OpenOptions::SHARE, ROOT) else {
         panic!()
     };
 
-    // Wait a bit to ensure the main thread has time to share the capability
-    sleep(10000);
+    sleep(500);
+    share_naming_object(10, file); // Assuming main thread has ID 10
     
     // Try to use the capability before it's revoked
     // let mut buf = [0u8];
     // let _read = read(file, &mut buf);
     // println!("Read value before revoke: {}", buf[0]);
+
+    sleep(4000);
     
     // Revoke the capability
-    //revoke_naming_object(9, file); // Assuming main thread has ID 1
-    
-    //println!("Capability revoked");
+
+    revoke_naming_object(10, file); // Assuming main thread has ID 10
+
+
+    // sleep(10000);
 
     loop {
         
@@ -47,4 +50,5 @@ pub fn main() {
 
     println!("Revoke thread started with id: {}", current().unwrap().id() + 1);
     thread::start_application("revoketest2", Vec::new());
+    thread::start_application("revoketest3", Vec::new());
 }

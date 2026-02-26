@@ -31,19 +31,13 @@ pub static SHARED_PIPE : Capability = Capability::new(1);
     syscall(SystemCall::Root, &[])
 }*/
 
-pub fn open(path: &str, flags: OpenOptions, dir_handle: Capability) -> Result<Capability, Errno> {
-    match CString::new(path) {
-        Ok(c_path) => {
-            match syscall(SystemCall::Open, &[
-                c_path.as_bytes().as_ptr() as usize,
-                flags.bits(),
-                dir_handle.handle(),
-            ]) {
-                Ok(cap_handle) => Ok(Capability::new(cap_handle)),
-                Err(e) => Err(e),
-            }
-        },
-        Err(_) => Err(Errno::EBADSTR),
+pub fn open(cap_handle: Capability, flags: OpenOptions) -> Result<Capability, Errno> {
+    match syscall(SystemCall::Open, &[
+        cap_handle.handle(),
+        flags.bits(),
+    ]) {
+        Ok(cap_handle) => Ok(Capability::new(cap_handle)),
+        Err(e) => Err(e),
     }
 }
 

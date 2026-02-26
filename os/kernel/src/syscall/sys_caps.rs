@@ -1,7 +1,8 @@
 use core::arch::asm;
 use log::{error, info, warn};
 use crate::capabilities::capability::{Capability, CapabilityFlags};
-use crate::scheduler;
+use crate::{scheduler, PROCESS_MANAGER};
+use crate::capabilities::capability_objects::naming_object::NamingObject;
 
 /**
 Share cap with same permissions
@@ -91,28 +92,30 @@ pub extern "sysv64" fn sys_naming_len() -> usize {
 
 ///revokes a shared naming capability from a thread's cspace completely
 pub extern "sysv64" fn sys_revoke_naming_cap(thread_id: usize, naming_object_number: usize) -> isize {
-    //check if caller shared the cap with the thread and revoke it from there
     let current_thread = scheduler().current_thread();
-
-    // Special case: if thread is revoking from itself, handle it directly
-    if thread_id == scheduler().current_thread().id() {
-        let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
-        if let Some(cap) = cspace.get_naming_capability_mut(naming_object_number) {
-            cap.revoke();
-            return 0;
-        }
+    let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
+    // First check if we have the capability to revoke
+    let Some(mut cap_to_check) = cspace.get_naming_capability_mut(naming_object_number) else { return -5 };
+    
+    if thread_id == current_thread.id() {
+        let mut cap_to_revoke : &mut Capability<NamingObject> = cap_to_check;
+        
+        //todo go through all cspaces and look for shares -> revoke them
+        
+        cap_to_revoke.revoke();
+        return 0;
     } else {
-        let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
-        let Some(cap) =  cspace.get_naming_capability(naming_object_number) else { return -5 };
-
         if let Some(receiver_thread) = scheduler().thread(thread_id){
             if let Some(mut cspace) = receiver_thread.cspace.invoke(){
-                cspace.revoke_naming_capability(cap);
+                let mut cap_to_revoke: &mut Capability<NamingObject> = todo!(); //todo find cap with same object
+
+                //todo go through all cspaces and look for shares -> revoke them
+
+                cap_to_revoke.revoke();
                 return 0;
             }
         }
     }
-    
 
     -5
 }

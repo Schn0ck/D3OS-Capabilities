@@ -11,28 +11,34 @@ use runtime::*;
 use terminal::{print, println};
 use capabilities::*;
 use capabilities::capability::Capability;
-use concurrent::thread::current;
+use concurrent::thread::{current, sleep};
 use terminal::write::print;
 
 const PIPE: &str = "/mypipe";
 const NR_OF_ITERATIONS: u32 = 6;
 
 fn writer_thread() {
+    sleep(500);
+
     println!("---writer_thread: start, id {}", current().unwrap().id());
     let thread = thread::current().unwrap();
     let mut buff= [0;1];
     //let res = read(SHARED_PIPE, &mut buff);
-    let cap = Capability::new(3); //buff[0] as usize; //receive the cap number //TODO receive
+    let pipe_cap = Capability::new(3); //receive the cap number
+
+    let Ok(open_pipe) = open(pipe_cap, OpenOptions::READWRITE) else {
+        println!("open failed");
+        return;
+    };
     
-    
-    println!("---writer_thread: got capability handle = {:?}", cap);
+    println!("---writer_thread: got capability handle = {:?}", pipe_cap);
 
     let mut cnt = 0;
     let mut wbuff: [u8; 1] = [0; 1];
     let mut ch: u8 = b'A'; // start at ASCII 'A'
     loop {
         wbuff[0] = ch;
-        let res = write(cap, &wbuff);
+        let res = write(open_pipe, &wbuff);
 
         if res.is_err() {
             println!("---writer_thread: write failed, error: {:?}", res);
@@ -58,6 +64,8 @@ fn writer_thread() {
 }
 
 fn reader_thread() {
+    sleep(500);
+
     // let thread = thread::current().unwrap();
     // println!("reader_thread (tid={}): start", thread.id());
     // let res = open("/mypipe", OpenOptions::READONLY);
@@ -67,13 +75,18 @@ fn reader_thread() {
     // }
     let mut buff= [0;1];
     //let res = read(SHARED_PIPE, &mut buff);
-    let cap = Capability::new(2); // buff[0] as usize; //receive the cap number
+    let pipe_cap = Capability::new(2); // buff[0] as usize; //receive the cap number
+
+    let Ok(open_pipe) = open(pipe_cap, OpenOptions::READWRITE) else {
+        println!("open failed");
+        return;
+    };
 
 
     let mut rbuff: [u8; 1] = [0; 1];
     let mut cnt = 0;
     loop {
-        let res = read(cap, &mut rbuff);
+        let res = read(open_pipe, &mut rbuff);
         if res.is_err() {
             println!("+++reader_thread: read failed, error: {:?}", res);
         } else {
@@ -91,7 +104,7 @@ fn reader_thread() {
        concurrent::thread::sleep(1000);
     }
 
-    // close(cap_handle);
+    //close(open_pipe);
     println!("+++reader_thread: end");
 }
 
@@ -103,7 +116,7 @@ pub fn main() {
 
     // debug_print_caps(thread::current().unwrap().id());
 
-    let res = mkfifo("/mypipe", OpenOptions::READWRITE | OpenOptions::SHARE, ROOT);
+    let res = mkfifo("mypipe", OpenOptions::READWRITE | OpenOptions::SHARE, ROOT);
     if res.is_err() {
         println!("mkfifo failed, error: {:?}", res);
         return;
@@ -111,9 +124,14 @@ pub fn main() {
     let pipe_cap = res.unwrap();
     println!("mkfifo: ok, cap_handle = {:?}", pipe_cap);
 
-    write(pipe_cap, b"Hello from main thread!").unwrap();
+    let Ok(open_pipe) = open(pipe_cap, OpenOptions::READWRITE) else {
+        println!("open failed");
+        return;
+    };
+
+    write(open_pipe, b"Hello from main thread!").unwrap();
     let buf = &mut [0u8; 23];
-    read(pipe_cap, buf).unwrap();
+    read(open_pipe, buf).unwrap();
 
     // Print individual bytes as characters
     print!("Read: ");
@@ -124,7 +142,7 @@ pub fn main() {
     }
     println!("");
 
-    share_naming_object(current().unwrap().id(), pipe_cap); //share with self to test
+    // share_naming_object(current().unwrap().id(), pipe_cap); //share with self to test
 
     let writer = thread::create(|| {
         writer_thread();

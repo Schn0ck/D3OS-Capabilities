@@ -27,6 +27,7 @@ const BROADCAST_PIPE : Once<Capability<NamingObject>> = Once::new();
 pub struct CSpace{
     syscall_capabilities: Vec<Capability<Syscall>>,
     naming_capabilities: Vec<Capability<NamingObject>>,
+    open_naming_capabilities: Vec<Capability<NamingObject>>, //caps that point to objects that are currently open, used for revoke checks
     //memory_capabilities: Vec<Capability<>>,
     //driver_capabilities: Vec<Capability<>>,
     //... other capability types
@@ -116,6 +117,7 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
         Self {
             syscall_capabilities,
             naming_capabilities,
+            open_naming_capabilities: Vec::new(),
             //memory_capabilities: Vec::new(),
             //driver_capabilities: Vec::new(),
             //... initialize other capability types
@@ -161,7 +163,7 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
         -1
     }
 
-    pub fn receive_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{ //todo warum nochmal receive option
+    pub fn receive_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{ 
         if let Some(cap) = capability {
             info!("     CSpace: Naming capability is none: {}", cap.is_none());
             self.naming_capabilities.push(cap);
@@ -171,6 +173,26 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
 
         warn!("     CSpace: Failed to receive naming capability");
         -1
+    }
+
+    pub fn receive_open_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{ 
+        if let Some(cap) = capability {
+            info!("     CSpace: Naming capability is none: {}", cap.is_none());
+            self.open_naming_capabilities.push(cap);
+            info!("     CSpace: Received naming capability, new length {}", self.open_naming_capabilities.len());
+            return self.open_naming_capabilities.len() as isize - 1; //panic if len > isize::MAX (9_223_372_036_854_775_808) --> practically impossible
+        }
+
+        warn!("     CSpace: Failed to receive naming capability");
+        -1
+    }
+
+    pub fn get_open_naming_capability(&self, handle: usize) -> Option<&Capability<NamingObject>> {
+        self.open_naming_capabilities.get(handle)
+    }
+
+    pub fn get_open_naming_capability_mut(&mut self, handle: usize) -> Option<&mut Capability<NamingObject>> {
+        self.open_naming_capabilities.get_mut(handle)
     }
 
     pub fn get_naming_capability(&self, handle: usize) -> Option<&Capability<NamingObject>> {
@@ -183,6 +205,19 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
 
     pub fn get_naming_capabilities_len(&self) -> usize {
         self.naming_capabilities.len()
+    }
+
+    pub fn get_open_naming_capabilities_len(&self) -> usize {
+        self.open_naming_capabilities.len()
+    }
+    
+    pub fn close_open_naming_capability(&mut self, handle: usize) -> isize{
+        if let Some(cap) = self.open_naming_capabilities.get_mut(handle) {
+            cap.revoke();
+            return 0;
+        }
+        warn!("     CSpace: Failed to close open naming capability, capability not found");
+        -1
     }
     //
     // pub fn debug_print_caps(&self){
