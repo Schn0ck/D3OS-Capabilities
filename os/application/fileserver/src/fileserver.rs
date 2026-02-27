@@ -10,7 +10,9 @@ use core::result::Result::Ok;
 use core::result::Result;
 use core::option::Option::*;
 use capabilities::capability::Capability;
-use naming::{mkfifo, read, write, ROOT, SHARED_PIPE};
+use concurrent::thread;
+use concurrent::thread::{create, sleep};
+use naming::{mkfifo, open, read, write, ROOT, SHARED_PIPE};
 use naming::shared_types::OpenOptions;
 use syscall::return_vals::Errno;
 
@@ -32,16 +34,13 @@ enum Response {
 }
 
 pub struct FileServer {
-    files: BTreeMap<FileHandle, Vec<u8>>,
+    files: BTreeMap<FileHandle, u8>,
     next_handle: usize,
     command_pipe: Capability,
 }
 
 impl FileServer {
     pub(crate) fn new(pipe: Capability) -> Result<Self, Errno> {
-        // Create command pipe with read/write/share permissions
-        write(pipe, &[0u8])?;
-
         Ok(Self {
             files: BTreeMap::new(),
             next_handle: 1,
@@ -50,68 +49,76 @@ impl FileServer {
     }
 
     pub(crate) fn run(&mut self) -> Result<(), Errno> {
-        let mut cmd_buf = [0u8; 9]; // 1 byte command + 8 bytes data
+        let mut cmd_buf = [0u8; 2]; // 1 byte command + 8 bytes data
+
+        println!("sending ack to client");
+
+        let Ok(openpipe) = open(self.command_pipe, OpenOptions::READWRITE) else {
+            println!("Failed to open command pipe");
+            return Err(Errno::EUNKN);
+        };
+
+        let _ = write(openpipe, &[1u8]); // Send ACK to client
+
+        println!("File server waiting for command...");
 
         loop {
             // Read command
-            read(self.command_pipe, &mut cmd_buf)?;
+            let _ = read(openpipe, &mut cmd_buf);
+            println!("File server received command: {}", cmd_buf[0]);
 
             match cmd_buf[0] {
                 // Write command
                 1 => {
-                    let mut content = Vec::new();
-                    let size = unsafe {
-                        let ptr = cmd_buf[1..9].as_ptr();
-                        // Force unaligned read if necessary
-                        core::ptr::read_unaligned(ptr as *const u64)
-                    }.to_le() as usize;
+                    let letter:u8 = cmd_buf[1].clone();
+                    let handle = self.next_handle;
+                    self.next_handle += 1;
+                    self.files.insert(handle, letter.clone());
 
+                    let response = handle;
+                    write(openpipe, &[response as u8])?;
+                    println!("File server stored letter '{}' with handle {}", letter.clone() as char, handle);
 
-                    let mut data = vec![0u8; size];
-                    read(self.command_pipe, &mut data)?;
-                    content.extend_from_slice(&data);
-
-                    let handle = self.next_handle + 1;
-                    self.files.insert(handle, content);
-
-                    // Send back handle
-                    let response = handle.to_le_bytes();
-                    write(self.command_pipe, &response)?;
+                    sleep(2000); // Sleep a bit to ensure the client has processed the response
                 }
 
                 // Read command
-                2 => {
-                    let handle = unsafe {
-                        let ptr = cmd_buf[1..9].as_ptr();
-                        // Force unaligned read if necessary
-                        core::ptr::read_unaligned(ptr as *const u64)
-                    }.to_le() as usize;
-
-                    if let Some(content) = self.files.get(&handle) {
-                        // Send size first
-                        let size = content.len() as u64;
-                        write(self.command_pipe, &size.to_le_bytes())?;
-
-                        // Then send content
-                        write(self.command_pipe, content)?;
+                2 => { // Read
+                    let handle = cmd_buf[1].clone() as usize;
+                    if let Some(&letter) = self.files.get(&handle) {
+                        write(openpipe, &[letter as u8])?;
+                        println!("File server sent letter '{}' for handle {}", letter, handle);
                     } else {
-                        // Send 0 size to indicate error
-                        write(self.command_pipe, &0u64.to_le_bytes())?;
+                        write(openpipe, &[0])?;
+                        println!("File server: handle {} not found", handle);
                     }
+                    break; //enough for this demo
                 }
+
+
 
                 _ => {} // Invalid command
             }
         }
-
+        Ok(())
     }
 }
 
-fn server_thread() {
-    let naming_len = capabilities::get_naming_len(); //todo: this wont work if multiple naming caps are added quickly
-    let mut server = FileServer::new(Capability::new(naming_len))
-        .expect("Failed to create file server");
-    println!("File server thread started for pipe at {}", naming_len);
+fn server_thread1() {
+    let cap_pos = 2; //this wont work if multiple naming caps are added quickly
+    let mut server = FileServer::new(Capability::new(cap_pos)).unwrap();
+
+    println!("File server thread started for pipe at {}", cap_pos);
+    if let Err(e) = server.run() {
+        println!("File server error: {:?}", e);
+    }
+
+}
+fn server_thread2() {
+    let cap_pos = 3; //this wont work if multiple naming caps are added quickly
+    let mut server = FileServer::new(Capability::new(cap_pos)).unwrap();
+
+    println!("File server thread started for pipe at {}", cap_pos);
     if let Err(e) = server.run() {
         println!("File server error: {:?}", e);
     }
@@ -119,27 +126,51 @@ fn server_thread() {
 }
 
 fn monitor_thread() {
-    let mut naming_len = 2;
+    let id = thread::current().unwrap().id() as u8;
+
+    let naming_len = 2;
+    let Ok(open_shared_pipe) = open(SHARED_PIPE, OpenOptions::READWRITE) else {
+        println!("Failed to open shared pipe in monitor thread");
+        return;
+    };
+
+    for i in 0..10 { //do more if I want to connect more clients
+        write(open_shared_pipe, &[id]);
+    }
+
+    sleep(3000); // Sleep a bit to ensure the new naming capability is registered and available
 
     loop {
-        write(SHARED_PIPE, &[concurrent::thread::current().unwrap().id() as u8]);
-
         if capabilities::get_naming_len() > naming_len {
-            //write cap_num into pipe so server thread knows which naming cap to use
+            //create a server thread
+            let _ = create(server_thread1);
+            println!("Monitor thread: Detected new client, started server thread");
+            
 
-            //create server thread
-            let _ = concurrent::thread::create(server_thread);
-
-            naming_len += 1;
+            sleep(10000);
+            let _ = create(server_thread2);
+            println!("Monitor thread: Detected new client, started server thread");
+            
+            break;
         }
-
-        concurrent::thread::sleep(1000);
     }
 }
 
 #[unsafe(no_mangle)]
 pub fn main() -> () {
     // Create the monitoring thread
-    let _ = concurrent::thread::create(monitor_thread);
-    println!("  Started file server!")
+    let _ = create(monitor_thread);
+    let Some(t1) = thread::start_application("fileclient1", Vec::new()) else {;
+        println!("Failed to start file client");
+        return;
+    };
+    let Some(t2) = thread::start_application("fileclient2", Vec::new()) else {;
+        println!("Failed to start file client");
+        return;
+    };
+
+    loop{}
 }
+
+// Idealerweise sollte über 2 pipes kommuniziert werden. Eine zum Lesen, eine zum schreiben,
+// damit der server/client nicht die eigene anfrage/antwort liest und so direkt entfernt

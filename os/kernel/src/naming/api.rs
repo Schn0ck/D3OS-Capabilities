@@ -464,7 +464,7 @@ fn open_shared_pipe(name: &str, flags: OpenOptions, capability_to_dir: &Capabili
         Err(e) => {
             if flags.contains(OpenOptions::CREATE) && e != Errno::EEXIST {
                 warn!("could not open object at path: {}, error: {:?}. Trying to create it.", path, e);
-                mkfifo(path, flags, capability_to_dir) //Problem here
+                mkfifo(name, flags, capability_to_dir) //Problem here
             } else {
                 Err(e)
             }

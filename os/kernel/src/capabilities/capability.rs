@@ -82,6 +82,7 @@ impl<T> Capability<T> {
             let new_cap_arc : Arc<Capability<T>> = Arc::new(new_cap.clone());
             self.shared_to.try_lock().unwrap().push(Arc::downgrade(&new_cap_arc));
     
+            info!("Shared cap");
             new_cap
         })
     }

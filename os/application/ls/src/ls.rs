@@ -27,30 +27,30 @@ fn print_dir_entry(dentry: DirEntry) {
 
 fn process_ls(path: &str) {
     todo!("Implement Cap handling");
-    // open directory
-    let res = naming::open(path, OpenOptions::DIRECTORY, ROOT);
-    if res.is_err() {
-        print_usage();
-        return;
-    }
-    let fd = res.unwrap();
-
-    // dump content of directory
-    loop {
-        let res = naming::readdir(fd);
-        match res {
-            Ok(data) => {
-                match data {
-                    Some(content) => print_dir_entry(content),
-                    None => break,
-                }
-            },
-            Err(_) => break
-        }
-    }
-
-    // close directory
-    //naming::close(fd).expect("Failed to close directory");
+    // // open directory
+    // let res = naming::open(path, OpenOptions::DIRECTORY, ROOT);
+    // if res.is_err() {
+    //     print_usage();
+    //     return;
+    // }
+    // let fd = res.unwrap();
+    // 
+    // // dump content of directory
+    // loop {
+    //     let res = naming::readdir(fd);
+    //     match res {
+    //         Ok(data) => {
+    //             match data {
+    //                 Some(content) => print_dir_entry(content),
+    //                 None => break,
+    //             }
+    //         },
+    //         Err(_) => break
+    //     }
+    // }
+    // 
+    // // close directory
+    // //naming::close(fd).expect("Failed to close directory");
 }
 
 pub fn args_to_vec() -> Vec<String> {

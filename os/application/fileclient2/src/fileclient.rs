@@ -24,28 +24,28 @@ pub struct FileClient {
 
 impl FileClient {
     pub fn connect() -> Option<Self> {
-        print!("---fileclient: connecting to file server...\n");
+        print!("---fileclient2: connecting to file server...\n");
 
-        let Ok(pipe) = mkfifo("client1", OpenOptions::all(), ROOT) else {
-            print!("---fileclient: failed to create client pipe\n");
+        let Ok(pipe) = mkfifo("client2", OpenOptions::all(), ROOT) else {
+            print!("---fileclient2: failed to create client pipe\n");
             return None;
         };
 
-        print!("---fileclient: created client pipe with cap = {}\n", pipe.handle());
+        print!("---fileclient2: created client pipe with cap = {}\n", pipe.handle());
 
         let mut thread_id = [1u8];
         let mut ack = [0u8; 1];
 
         let Ok(opensharedpipe) = open(SHARED_PIPE, OpenOptions::READWRITE) else {
-            print!("---fileclient: failed to open shared pipe\n");
+            print!("---fileclient2: failed to open shared pipe\n");
             return None;
         };
 
 
         read(opensharedpipe, &mut thread_id); //read server thread id from shared pipe
-        print!("---fileclient: got thread id = {}\n", thread_id[0].clone() as usize);
+        print!("---fileclient2: got thread id = {}\n", thread_id[0].clone() as usize);
 
-        sleep(1500); //Wait to be sure the server thread is initialized
+        sleep(10000); //Wait to be sure the server thread is initialized
 
         share_naming_object(thread_id[0].clone() as usize, pipe); //share client pipe with server
 
@@ -54,21 +54,21 @@ impl FileClient {
 
 
         let Ok(openpipe) = open(pipe, OpenOptions::READWRITE) else {
-            print!("---fileclient: failed to open shared pipe\n");
+            print!("---fileclient2: failed to open shared pipe\n");
             return None;
         };
 
 
         read(openpipe, &mut ack); //read ACK
 
-        print!("---fileclient: got server response = {}. Client Connected! \n", ack[0].clone() as usize);
+        print!("---fileclient2: got server response = {}. Client Connected! \n", ack[0].clone() as usize);
 
         Some(FileClient { pipe_cap: pipe })
     }
 
     pub fn write_file(&self, letter: u8) -> Result<FileHandle, Errno> {
         let Ok(openpipe) = open(self.pipe_cap, OpenOptions::READWRITE) else {
-            println!("---fileclient: failed to open pipe");
+            println!("---fileclient2: failed to open pipe");
             return Err(Errno::ENOENT);
         };
 
@@ -86,7 +86,7 @@ impl FileClient {
 
     pub fn read_file(&self, handle: FileHandle) -> Result<u8, Errno> {
         let Ok(openpipe) = open(self.pipe_cap, OpenOptions::READWRITE) else {
-            println!("---fileclient: failed to open pipe");
+            println!("---fileclient2: failed to open pipe");
             return Err(Errno::ENOENT);
         };
 
@@ -107,12 +107,12 @@ impl FileClient {
 #[unsafe(no_mangle)]
 pub fn main(){
     let Some(mut client) = FileClient::connect() else {
-        print!("fileclient: failed to connect to file server\n");
+        print!("fileclient2: failed to connect to file server\n");
         return;
     };
 
-    let handle = client.write_file(b'A').expect("Failed to write letter");
-    print!("Wrote 'A' with handle: {}\n", handle);
+    let handle = client.write_file(b'B').expect("Failed to write letter");
+    print!("Wrote 'B' with handle: {}\n", handle);
 
     // Read it back
     let Ok(letter) = client.read_file(handle) else {

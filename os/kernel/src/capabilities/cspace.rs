@@ -77,7 +77,7 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
             sys_revoke_syscall_cap as *const (),
             sys_share_naming_cap as *const (),
             sys_revoke_naming_cap as *const (),
-            sys_naming_len as *const (),
+            sys_naming_len as *const (), //40
         ]; //TODO individual configuration depending on calling app
         
         let mut num = 0;
@@ -163,7 +163,7 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
         -1
     }
 
-    pub fn receive_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{ 
+    pub fn receive_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{
         if let Some(cap) = capability {
             info!("     CSpace: Naming capability is none: {}", cap.is_none());
             self.naming_capabilities.push(cap);
@@ -175,7 +175,7 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
         -1
     }
 
-    pub fn receive_open_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{ 
+    pub fn receive_open_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{
         if let Some(cap) = capability {
             info!("     CSpace: Naming capability is none: {}", cap.is_none());
             self.open_naming_capabilities.push(cap);
@@ -210,10 +210,11 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
     pub fn get_open_naming_capabilities_len(&self) -> usize {
         self.open_naming_capabilities.len()
     }
-    
+
     pub fn close_open_naming_capability(&mut self, handle: usize) -> isize{
         if let Some(cap) = self.open_naming_capabilities.get_mut(handle) {
             cap.revoke();
+            self.open_naming_capabilities.remove(handle);
             return 0;
         }
         warn!("     CSpace: Failed to close open naming capability, capability not found");

@@ -218,7 +218,7 @@ unsafe extern "C" fn get_capability_entry() -> *const () {
                 permission_denied() as *const ()
             }
         } else {
-            error!("Could not invoke CSpace for current thread when trying to get syscall capability for syscall id [{}]!", syscall_number);
+            error!("Could not invoke CSpace for current thread when trying to get syscall capability for syscall id [{}]!, thread: {}", syscall_number, scheduler().current_ids().1);
             permission_denied() as *const ()
         }
     };
