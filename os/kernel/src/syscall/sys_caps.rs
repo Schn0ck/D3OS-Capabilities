@@ -1,7 +1,7 @@
 use core::arch::asm;
 use log::{error, info, warn};
 use crate::capabilities::capability::{Capability, CapabilityFlags};
-use crate::{scheduler, PROCESS_MANAGER};
+use crate::{process_manager, scheduler, PROCESS_MANAGER};
 use crate::capabilities::capability_objects::naming_object::NamingObject;
 
 /**
@@ -96,32 +96,33 @@ pub extern "sysv64" fn sys_revoke_naming_cap(thread_id: usize, naming_object_num
     let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
     // First check if we have the capability to revoke
     let Some(mut cap_to_check) = cspace.get_naming_capability_mut(naming_object_number) else { return -5 };
-    
+
     if thread_id == current_thread.id() {
-        let mut cap_to_revoke : &mut Capability<NamingObject> = cap_to_check;
-        
+        let mut cap_to_revoke: &mut Capability<NamingObject> = cap_to_check;
+
         //todo go through all cspaces and look for shares -> revoke them
-        
+
         cap_to_revoke.revoke();
         return 0;
     } else {
-        if let Some(receiver_thread) = scheduler().thread(thread_id){
-            if let Some(mut cspace) = receiver_thread.cspace.invoke(){
-                let mut cap_to_revoke: &mut Capability<NamingObject> = todo!(); //todo find cap with same object
+        if let Some(receiver_thread) = scheduler().thread(thread_id) {
+            let Some(mut cspace) = receiver_thread.cspace.invoke() else { return -5; };
+            let Some(mut cap_to_revoke) = cspace.get_naming_capability_mut(naming_object_number) else { return -5 };
+            let processes = process_manager().read().active_process_ids();
 
-                //todo go through all cspaces and look for shares -> revoke them
-
-                cap_to_revoke.revoke();
-                return 0;
+            for i in processes { //go through all cspaces and look for shares -> revoke them
+                let _ = process_manager().read().process(i).cspace.invoke().expect("could not invoke cspace").revoke_naming_capability(cap_to_revoke);
             }
+            cap_to_revoke.revoke();
+            return 0;
         }
     }
-
     -5
 }
 
 ///revokes specific rights from a shared naming capability from a thread's cspace
 pub extern "sysv64" fn sys_revoke_naming_rights(thread_id: usize, naming_object_number: usize, rights: usize) -> isize {
+    let rights_to_revoke = CapabilityFlags::from_bits(rights as u32).unwrap_or_else(|| { CapabilityFlags::empty() });
     let current_thread = scheduler().current_thread();
     let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
     let capa =  cspace.get_naming_capability(naming_object_number);
@@ -129,9 +130,14 @@ pub extern "sysv64" fn sys_revoke_naming_rights(thread_id: usize, naming_object_
 
     if let Some(cap) = capa {
         if let Some(receiver_thread) = scheduler().thread(thread_id){
-            if let Some(mut cspace) = receiver_thread.cspace.invoke(){
-                return cspace.revoke_naming_rights(cap, CapabilityFlags::from_bits(rights as u32).unwrap_or_else(|| { CapabilityFlags::empty() })); //if invalid rights provided, treat as empty rights -> no revocation
+            let Some(mut cap_to_revoke) = cspace.get_naming_capability_mut(naming_object_number) else { return -5 };
+            let processes = process_manager().read().active_process_ids();
+
+            for i in processes{ //go through all cspaces and look for shares -> revoke rights
+                let _ = process_manager().read().process(i).cspace.invoke().expect("could not invoke cspace").revoke_naming_rights(cap_to_revoke, rights_to_revoke);
             }
+            cap_to_revoke.revoke_rights(rights_to_revoke);
+            return  0;
         }
     }
     -5

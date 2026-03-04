@@ -25,6 +25,13 @@ pub fn main() {
     let file = Capability::new(2); //Shared Cap at index 2
     let mut buf = [0u8; 5];
 
+    let Ok(pipe) = open(file, OpenOptions::READWRITE) else {
+        println!("Process 3: Failed to open shared pipe");
+        return;
+    };
+
+    println!("Process 3: Successfully opened shared pipe");
+
     // let res = write(file, "Hello".as_ref());
     // if res.is_err() {
     //     println!("write error = {:?}", res);
@@ -70,7 +77,7 @@ pub fn main() {
     //     println!("{:?}", &buf)
     // }
 
-    while write(file, "Process 3: Capability revoked, write should fail".as_ref()).is_ok() {
+    while write(pipe, "Process 3: Capability revoked, write should fail".as_ref()).is_ok() {
         sleep(500);
         println!("Process 3, waiting for capability to be revoked");
     }

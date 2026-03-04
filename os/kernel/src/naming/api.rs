@@ -443,7 +443,7 @@ pub fn mkfifo(name: &str, flags: OpenOptions, dir_cap: &Capability<NamingObject>
         },
         Err(e) => {
             error!("mkfifo: failed to create pipe '{}': {:?}", name, e);
-            Err(e)
+            Err(Errno::EACCES) //hide error details to avoid sec leak
         }
     }
 }

@@ -17,12 +17,19 @@ use concurrent::thread::{sleep, Thread, current};
 #[unsafe(no_mangle)]
 pub fn main() {
     println!("2nd Process Waiting for capability to be shared...");
-    while get_naming_len() < 3 {
-        sleep(100);
+    while get_naming_len() == 2 {
+        sleep(1000);
     }
 
     let file = Capability::new(2); //Shared Cap at index 2
     let mut buf = [0u8; 5];
+    
+    let Ok(pipe) = open(file, OpenOptions::READWRITE) else {
+        println!("Process 2: Failed to open shared pipe");
+        return;
+    };
+    
+    println!("Process 2: Successfully opened shared pipe");
 
     // let res = write(file, "Hello".as_ref());
     // if res.is_err() {
@@ -45,9 +52,9 @@ pub fn main() {
     sleep(1000);
     println!("Shared Capability with 3rd process");
     share_naming_object(12, file); // Assuming main thread has ID 12
-
-    while write(file, "Process 2: Capability revoked, write should fail".as_ref()).is_ok() {
-        sleep(500);
+    
+    while write(pipe, "Process 2: Capability revoked, write should fail".as_ref()).is_ok() {
+        sleep(1000);
         println!("Process 2, waiting for capability to be revoked");
     }
     

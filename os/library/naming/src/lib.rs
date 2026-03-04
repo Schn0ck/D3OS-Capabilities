@@ -151,9 +151,9 @@ pub fn cd(path: &str) -> Result<usize, Errno> { //todo check how that works with
     }
 }
 
-pub fn mkfifo(path: &str, flags: OpenOptions, dir: Capability) -> Result<Capability, Errno> {
+pub fn mkfifo(name: &str, flags: OpenOptions, dir: Capability) -> Result<Capability, Errno> {
     // print!("lib::mkfifo called with path: {}, flags: {:?}, dir_handle: {} \n", path, flags, dir.handle());
-    match CString::new(path) {
+    match CString::new(name) {
         Ok(c_path) => {
             match syscall(SystemCall::Mkfifo, &[c_path.as_bytes().as_ptr() as usize, flags.bits(), dir.handle()]){
                 Ok(cap_handle) => Ok(Capability::new(cap_handle)),
