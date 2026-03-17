@@ -159,6 +159,7 @@ impl<T> Capability<T> {
     
     pub(crate) fn points_to_same_object(&self, other: &Capability<T>) -> bool {
         if let (Some(obj), Some(other_obj)) = (&self.obj, &other.obj) {
+            info!("                 {:?}{:?}", Arc::<Mutex<T>>::as_ptr(obj), Arc::<Mutex<T>>::as_ptr(other_obj));
             Arc::<Mutex<T>>::as_ptr(obj) == Arc::<Mutex<T>>::as_ptr(other_obj)
         } else {
             false

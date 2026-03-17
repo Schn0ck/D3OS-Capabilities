@@ -57,14 +57,14 @@ pub fn seek(cap: Capability, offset: usize, origin: SeekOrigin) -> Result<usize,
     syscall(SystemCall::Seek, &[cap.handle(), offset, origin.into()])
 }
 
-// pub fn close(cap: Capability) -> Result<usize, Errno> {
-//     syscall(SystemCall::Close, &[cap.handle()])
-// }
+pub fn close(cap: Capability) -> Result<usize, Errno> {
+    syscall(SystemCall::Close, &[cap.handle()])
+}
 
-pub fn mkdir(path: &str, dir_handle: Capability) -> Result<Capability, Errno> {
+pub fn mkdir(path: &str, flags: OpenOptions, dir_handle: Capability) -> Result<Capability, Errno> {
     match CString::new(path) {
         Ok(c_path) => {
-            match syscall(SystemCall::MkDir, &[c_path.as_bytes().as_ptr() as usize, dir_handle.handle()]){
+            match syscall(SystemCall::MkDir, &[c_path.as_bytes().as_ptr() as usize,  flags.bits(), dir_handle.handle()]){
                 Ok(cap_handle) => Ok(Capability::new(cap_handle)),
                 Err(e) => Err(e),
             }
@@ -73,10 +73,10 @@ pub fn mkdir(path: &str, dir_handle: Capability) -> Result<Capability, Errno> {
     }
 }
 
-pub fn touch(path: &str, dir_handle: Capability) -> Result<Capability, Errno> { //todo check how that works with current system
+pub fn touch(path: &str, flags: OpenOptions, dir_handle: Capability) -> Result<Capability, Errno> {
     match CString::new(path) {
         Ok(c_path) => {
-            match syscall(SystemCall::Touch, &[c_path.as_bytes().as_ptr() as usize, dir_handle.handle()]){
+            match syscall(SystemCall::Touch, &[c_path.as_bytes().as_ptr() as usize,  flags.bits(), dir_handle.handle()]){
                 Ok(cap_handle) => Ok(Capability::new(cap_handle)),
                 Err(e) => Err(e),
             }
@@ -90,7 +90,7 @@ pub fn readdir(fh: Capability) -> Result<Option<DirEntry>, Errno> { //todo check
     let ret = syscall(SystemCall::Readdir, &[
         fh.handle(),
         raw_dirent.as_mut_ptr() as usize,
-        mem::size_of::<RawDirent>(),
+        size_of::<RawDirent>(),
     ]);
     match ret {
         Ok(0) => Ok(None),

@@ -2,6 +2,7 @@
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::arch::x86_64::__get_cpuid_max;
 use core::ops::{Add, Deref};
 use log::{info, warn};
 use spin::Once;
@@ -11,6 +12,7 @@ use crate::capabilities::capability;
 use crate::capabilities::capability::{Capability, CapabilityFlags};
 use crate::capabilities::capability_objects::naming_object::{create_naming_capability, NamingObject};
 use crate::capabilities::capability_objects::syscall_object::Syscall;
+use crate::device::cpu;
 use crate::naming::{api, lookup};
 use crate::naming::api::shared_pipe;
 use crate::naming::traits::{as_named_object, DirectoryObject, NamedObject};
@@ -27,9 +29,7 @@ const BROADCAST_PIPE : Once<Capability<NamingObject>> = Once::new();
 pub struct CSpace{
     syscall_capabilities: Vec<Capability<Syscall>>,
     naming_capabilities: Vec<Capability<NamingObject>>,
-    open_naming_capabilities: Vec<Capability<NamingObject>>, //caps that point to objects that are currently open, used for revoke checks
-    //memory_capabilities: Vec<Capability<>>,
-    //driver_capabilities: Vec<Capability<>>,
+    open_naming_capabilities: Vec<Capability<NamingObject>>, //caps that point to objects that are currently open, used for read/write
     //... other capability types
 }
 
@@ -233,41 +233,71 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
     // }
     
     /// check if the object from the provided capability is stored and if it was shared by the provided capability, if yes then revoke the cap, otherwise do nothing
-    pub fn revoke_naming_capability(&mut self, cap: &Capability<NamingObject>){
-        //check if any object from provided cap is stored and if yes then revoke the cap, otherwise do nothing
-        info!("revoke_naming_capability: cap is original: {}, cap was shared to capability: {}", cap.is_original(), cap.was_shared_to(&self.naming_capabilities[0]));
-        if let Some(pos) = self.naming_capabilities.iter_mut().position(|c| c.points_to_same_object(cap)) {
-            let capability = self.naming_capabilities.get_mut(pos).unwrap();
-            if cap.was_shared_to(capability) || cap.is_original() {
-                capability.revoke();
+    pub fn revoke_naming_capability(&mut self, cap: &Capability<NamingObject>) {
+        let was_enabled = cpu::disable_int_nested();
+        let mut capability_revoked = false;
+
+        // Iterate through all naming capabilities and check for matches
+        for capability in self.naming_capabilities.iter_mut() {
+            if capability.points_to_same_object(cap) { //todo never true
+                if cap.was_shared_to(capability) {
+                    capability.revoke();
+                    capability_revoked = true;
+                }
             }
-        } else {
-            warn!("     CSpace: Failed to revoke naming capability, capability not found");
         }
-    //todo Also Transitive. It is already Immediate. Independent should be possible, Temporal not necessary.
+
+        for capability in self.open_naming_capabilities.iter_mut() {
+            if capability.points_to_same_object(cap) {
+                if cap.was_shared_to(capability) {
+                    capability.revoke();
+                    capability_revoked = true;
+                }
+            }
+        }
+        cpu::enable_int_nested(was_enabled);
+        if capability_revoked {
+            info!("     CSpace: Successfully revoked matching naming capabilities");
+        } else {
+            warn!("     CSpace: Failed to revoke naming capability, no matching capability found");
+        }
     }
 
     ///Same checks as with revoke_naming_capability but only revokes the provided rights instead of the whole cap
     pub fn revoke_naming_rights(&mut self, cap: &Capability<NamingObject>, rights: CapabilityFlags) -> isize{
+        let was_enabled = cpu::disable_int_nested();
         if rights.is_empty() {
             warn!("     CSpace: Failed to revoke naming rights, no rights provided");
             return -1;
         }
-        
-        //check if any object from provided cap is stored and if yes then revoke the cap, otherwise do nothing
-        if let Some(pos) = self.naming_capabilities.iter_mut().position(|c| c.points_to_same_object(cap)) {
-            let capability = self.naming_capabilities.get_mut(pos).unwrap();
-            if cap.was_shared_to(capability) || cap.is_original() {
-                capability.revoke_rights(rights);
-                return 0;
+
+        let mut rights_revoked = false;
+
+
+        // Iterate over all naming capabilities and find all that match the object of the provided cap
+        for capability in self.naming_capabilities.iter_mut() {
+            if capability.points_to_same_object(cap) {
+                if cap.was_shared_to(capability) {
+                    capability.revoke_rights(rights);
+                    rights_revoked = true;
+                }
             }
-        } else {
-            warn!("     CSpace: Failed to revoke naming capability, capability not found");
         }
-        
+
+        for capability in self.open_naming_capabilities.iter_mut() {
+            if capability.points_to_same_object(cap) {
+                if cap.was_shared_to(capability) {
+                    capability.revoke_rights(rights);
+                    rights_revoked = true;
+                }
+            }
+        }
+
+        cpu::enable_int_nested(was_enabled);
+        if rights_revoked {
+            return 0isize;
+        }
         -1
-        //check if object from provided cap is stored and if yes then revoke the caps rights, otherwise do nothing
-        //todo Also Transitive. It is already Immediate. Independent should be possible, Temporal not necessary.
     }
     
 }

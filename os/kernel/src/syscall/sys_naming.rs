@@ -123,7 +123,7 @@ pub unsafe extern "sysv64" fn sys_write(cap_handle: usize, buffer: *const u8, bu
 pub extern "sysv64" fn sys_seek(cap_handle: usize, offset: usize, origin: usize) -> isize {
     let current_thread = scheduler().current_thread();
     let cspace = current_thread.cspace.invoke().unwrap();
-    let naming_cap = cspace.get_naming_capability(cap_handle);
+    let naming_cap = cspace.get_open_naming_capability(cap_handle);
 
     if let Some(cap) = naming_cap {
         return return_vals::convert_syscall_result_to_ret_code(api::seek(&cap, offset, SeekOrigin::from_primitive(origin)));
@@ -132,68 +132,68 @@ pub extern "sysv64" fn sys_seek(cap_handle: usize, offset: usize, origin: usize)
     Errno::EACCES as isize
 }
 
-/*pub extern "sysv64" fn sys_close(fh: usize) -> isize {
-    return_vals::convert_syscall_result_to_ret_code(api::close(fh))
-}*/
-
 pub extern "sysv64" fn sys_close(cap_handle: usize) -> isize {
     let current_thread = scheduler().current_thread();
     let mut cspace = current_thread.cspace.invoke().unwrap();
-    let open_naming_cap = cspace.get_open_naming_capability(cap_handle);
+    let Some(cap) = cspace.get_open_naming_capability(cap_handle) else {
+        error!("sys_close: cap not found for cap_handle: {}", cap_handle);
+        return Errno::EACCES as isize;
+    };
 
-    if let Some(cap) = open_naming_cap {
-        match api::close(&cap) { 
-            Ok(_) => {
-                // Remove the capability from the current thread's CSpace
-                cspace.close_open_naming_capability(cap_handle);
-            },
-            Err(errno) => return errno as isize,
-        }
+
+    match api::close(&cap) {
+        Ok(_) => {
+            // Remove the capability from the current thread's CSpace
+            cspace.close_open_naming_capability(cap_handle);
+            0
+        },
+        Err(errno) => errno as isize,
     }
-    Errno::EACCES as isize
+
 }
 
-pub unsafe extern "sysv64" fn sys_mkdir(path: *const u8, cap_to_dir: Capability<NamingObject>, cap_handle: usize) -> isize {
-    let path = unsafe { ptr_to_string(path).unwrap() };
-    match api::mkdir(&*path, cap_to_dir, cap_handle) {
+pub unsafe extern "sysv64" fn sys_mkdir(name: *const u8, flag_bits: usize, dir_cap_handle: usize) -> isize {
+    let current_thread = scheduler().current_thread();
+    let flags = OpenOptions::from_bits(flag_bits).unwrap();
+    let name = unsafe { ptr_to_string(name).unwrap() };
+
+    // Get the capability and release the cspace lock before api call
+    let mut cspace = current_thread.cspace.invoke().unwrap();
+    let Some(dir_cap)= cspace.get_naming_capability(dir_cap_handle) else { 
+        error!("sys_mkdir: cap not found for name: {}, dir_cap_handle: {}", name, dir_cap_handle);
+        return Errno::EACCES as isize 
+    };
+    
+    let path = dir_cap.invoke().unwrap().path.clone();
+
+    match api::mkdir(&*(path + name.as_str()), flags, dir_cap) {
         Ok(cap) => {
             // Store capability in current thread's CSpace
-            let handle = {
-                if let Some(mut cspace) = scheduler().current_thread().cspace.invoke() {
-                // Store the capability and return its handle
-                // Implementation depends on your CSpace management
-                cspace.receive_naming_capability(Some(cap))
-                } else {
-                    Errno::EACCES as isize
-                }
-            };
-            handle
+            cspace.receive_naming_capability(Some(cap))
         }
         Err(errno) => errno as isize
     }
 }
 
-pub unsafe extern "sysv64" fn sys_touch(path: *const u8, cap_handle: usize) -> isize {//TODO why handle, not cap?
+pub unsafe extern "sysv64" fn sys_touch(path: *const u8, flag_bits: usize ,cap_handle: usize) -> isize {
     let current_thread = scheduler().current_thread();
     let path = unsafe { ptr_to_string(path).unwrap() };
-    let cspace = current_thread.cspace.invoke().unwrap();
-    let naming_cap = cspace.get_naming_capability(cap_handle);
+    let flags = OpenOptions::from_bits(flag_bits).unwrap();
+    let mut cspace = current_thread.cspace.invoke().unwrap();
+    let Some(naming_cap) = cspace.get_naming_capability(cap_handle) else {
+        error!("sys_touch: cap not found for path: {}, cap_handle: {}", path, cap_handle);
+        return Errno::EACCES as isize
+    };
 
-    if let Some(cap) = naming_cap {
-        match api::touch(&*path, &cap, cap_handle) {
-            Ok(cap) => {
-                // Store capability in current thread's CSpace
-                if let Some(mut cspace) = scheduler().current_thread().cspace.invoke() {
-                    // Store the capability and return its handle
-                    // Implementation depends on your CSpace management
-                    let handle = cspace.receive_naming_capability(Some(cap));
-                    return handle;
-                }
-            },
-            Err(_) => return Errno::EINVAL as isize,
-        }
+
+    match api::touch(&*path, flags, naming_cap) {
+        Ok(cap) => {
+            // Store capability in current thread's CSpace
+            let handle = cspace.receive_naming_capability(Some(cap));
+            handle
+        },
+        Err(_) => Errno::EINVAL as isize,
     }
-    Errno::EACCES as isize
 }
 
 pub unsafe extern "sysv64" fn sys_mkfifo(path: *const u8, flag_bits: usize, dir_cap_handle: usize) -> isize {
@@ -201,28 +201,24 @@ pub unsafe extern "sysv64" fn sys_mkfifo(path: *const u8, flag_bits: usize, dir_
     let flags = OpenOptions::from_bits(flag_bits).unwrap();
     let path = unsafe { ptr_to_string(path).unwrap() };
 
-    info!("sys_mkfifo called with path: {}, flags: {:?}, dir_cap_handle: {}", path, flags, dir_cap_handle);
+    // info!("sys_mkfifo called with path: {}, flags: {:?}, dir_cap_handle: {}", path, flags, dir_cap_handle);
     
     // Get the capability and release the cspace lock before api call
     let mut cspace = current_thread.cspace.invoke().unwrap();
-    let dir_cap = cspace.get_naming_capability(dir_cap_handle);
+    let Some(dir_cap)= cspace.get_naming_capability(dir_cap_handle) else { return Errno::EACCES as isize };
 
     // Now make the api call with no locks held
-    if let Some(dir_cap) = dir_cap {
-        match api::mkfifo(&*path, flags, &dir_cap) {
-            Ok(new_cap) => {
-                // Reacquire the lock to store the new capability
-                info!("mkfifo succeeded, storing new capability");
-                return cspace.receive_naming_capability(Some(new_cap));
-            }
-            Err(errno) => {
-                warn!("mkfifo failed");
-                return errno as isize;
-            }
+    match api::mkfifo(&*path, flags, &dir_cap) {
+        Ok(new_cap) => {
+            // Reacquire the lock to store the new capability
+            info!("mkfifo succeeded, storing new capability");
+            cspace.receive_naming_capability(Some(new_cap))
+        }
+        Err(errno) => {
+            warn!("mkfifo failed");
+            errno as isize
         }
     }
-
-    Errno::EACCES as isize
 }
 
     /// Convert a raw pointer resulting from a CString to a UTF-8 String
@@ -246,13 +242,19 @@ pub(super) unsafe fn ptr_to_string(ptr: *const u8) -> Result<String, Errno> {
     }
 }
 
-pub unsafe extern "sysv64" fn sys_readdir(fh: usize, buffer: *mut u8, buffer_length: usize) -> isize {
-    if buffer.is_null() || buffer_length == 0 || buffer_length <  mem::size_of::<RawDirent>() {
+pub unsafe extern "sysv64" fn sys_readdir(cap_handle: usize, buffer: *mut u8, buffer_length: usize) -> isize {
+    if buffer.is_null() || buffer_length == 0 || buffer_length <  size_of::<RawDirent>() {
         return Errno::EINVAL as isize;
     }
-    let dentry_ptr = buffer as *mut RawDirent;
-    let dentry = unsafe { dentry_ptr.as_mut() };
-    return_vals::convert_syscall_result_to_ret_code(api::readdir(fh, dentry))
+    let current_thread = scheduler().current_thread();
+    let mut cspace = current_thread.cspace.invoke().unwrap();
+    let Some(dir_cap)= cspace.get_naming_capability(cap_handle) else { return Errno::EACCES as isize };
+    
+    let path = dir_cap.invoke().unwrap().path.clone();
+
+    //todo lookup all current caps at that path and return them one by one on each call to readdir. If there are no more caps, return 0
+    
+    Errno::EACCES as isize
 }
 
 

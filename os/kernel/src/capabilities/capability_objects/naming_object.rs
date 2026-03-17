@@ -8,9 +8,8 @@ use crate::naming::traits::NamedObject;
 pub struct NamingObject {
     pub(crate)named_object: Arc<NamedObject>,
     pub(crate)access_rights: OpenOptions,
-    pub(crate)position: AtomicUsize,
     pub(crate)path: String,
-    parent_handle: Option<usize>,  // Handle to parent directory's capability TODO needed?
+    pub(crate)position: AtomicUsize, // For files and pipes, tracks the current read/write position. For directories, tracks the current index for readdir.
 }
 
 #[derive(Copy, Clone)]
@@ -21,18 +20,17 @@ pub enum ObjectType {
 }
 
 impl NamingObject {
-    fn new(object: NamedObject, rights: OpenOptions, parent: Option<usize>, path: String) -> Self {
+    fn new(object: NamedObject, rights: OpenOptions, path: String) -> Self {
         Self {
             named_object: Arc::from(object),
             access_rights: rights,
-            position: AtomicUsize::new(0),
-            parent_handle: parent,
             path,
+            position: AtomicUsize::new(0),
         }
     }
 }
 
-pub fn create_naming_capability(object: NamedObject, rights: OpenOptions, parent: Option<usize>, path: String) -> Capability<NamingObject> {
+pub fn create_naming_capability(object: NamedObject, rights: OpenOptions, path: String) -> Capability<NamingObject> {
     let mut flags = CapabilityFlags::empty();
     if rights.contains(OpenOptions::READONLY) || rights.contains(OpenOptions::READWRITE) {
         flags |= CapabilityFlags::READ;
@@ -44,5 +42,5 @@ pub fn create_naming_capability(object: NamedObject, rights: OpenOptions, parent
         flags |= CapabilityFlags::SHARE;
     }
 
-    Capability::new(NamingObject::new(object, rights, parent, path), flags) //Todo make it customizable
+    Capability::new(NamingObject::new(object, rights, path), flags) //Todo make it customizable
 }
