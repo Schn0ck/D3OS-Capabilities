@@ -38,7 +38,7 @@ pub(super) fn open_object_table_init() {
 }
 
 pub(super) fn open(path: &str, flags: OpenOptions) -> Result<NamedObject, Errno> {
-    info!("opening '{}'", path);
+    // info!("opening '{}'", path);
     // try to open the named object for the given path
     let result = lookup::lookup_named_object(path);
     if result.is_err() {
@@ -53,7 +53,7 @@ pub(super) fn open(path: &str, flags: OpenOptions) -> Result<NamedObject, Errno>
         }
     }
 
-    info!("found named object: {:?}", found_named_object);
+    // info!("found named object: {:?}", found_named_object);
     Ok(found_named_object)
     //get_open_object_table().allocate_handle(Arc::new(OpenedObject::new(Arc::new(found_named_object), AtomicUsize::new(0), flags)))
 }

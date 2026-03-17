@@ -114,7 +114,7 @@ pub fn open(flags: OpenOptions, file_cap: &Capability<NamingObject>) -> Result<C
     // Handle pipes differently from files
     match open_objects::open(&naming_obj.path, flags) { //todo adds / to path which is a problem for directory capabilities
         Ok(obj) => {
-            info!("opened object at path: {}, returning OK", &naming_obj.path);
+            // info!("opened object at path: {}, returning OK", &naming_obj.path);
             Ok(create_naming_capability(obj, flags, naming_obj.path.to_string()))
         },
         Err(e) => Err(e)
@@ -157,13 +157,13 @@ pub fn write(cap: &Capability<NamingObject>, buffer: &[u8]) -> Result<usize, Err
             // Make `opened_object` mutable here
             return naming_obj.named_object.as_pipe().and_then(|pipe| {
                 let bytes_written = pipe.write(buffer, 0, naming_obj.access_rights)?;
-                info!("pipe written: {:?}, {} byte(s)", buffer, bytes_written);
+                // info!("pipe written: {:?}, {} byte(s)", buffer, bytes_written);
                 Ok(bytes_written) // Return the bytes written
             });
         }
         Err(Errno::ENOTSUP)
     } else {
-        info!("could not invoke capability");
+        // info!("could not invoke capability");
         Err(Errno::EACCES)
     }
 }
@@ -432,7 +432,7 @@ pub fn mkfifo(name: &str, flags: OpenOptions, dir_cap: &Capability<NamingObject>
 
     match result {
         Ok(pipe_obj) => {
-            info!("mkfifo: created pipe '{}'", name);
+            // info!("mkfifo: created pipe '{}'", name);
             // Create capability with full permissions since this is the original capability
             Ok(create_naming_capability(
                 pipe_obj,

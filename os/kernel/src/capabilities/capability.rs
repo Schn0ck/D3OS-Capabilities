@@ -4,7 +4,7 @@ use alloc::sync::Weak;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::bitflags;
-use log::{info, warn};
+use log::{error, info, warn};
 use pc_keyboard::KeyCode::Mute;
 use spin::{Mutex, MutexGuard};
 bitflags! {

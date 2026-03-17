@@ -24,7 +24,7 @@ pub extern "sysv64" fn sys_share_syscall_cap(thread_id: usize, syscall_number: u
 
     if let Some(receiver_thread) = scheduler().thread(thread_id) {
         if let Some(mut cspace) = receiver_thread.cspace.invoke() {
-            info!("     cspace found");
+            // info!("     cspace found");
             if let Some(ref cap) = shared_cap {
                 return cspace.receive_syscall_capability(shared_cap, syscall_number);
             }
@@ -47,13 +47,13 @@ pub extern "sysv64" fn sys_revoke_syscall_cap(thread_id: usize, syscall_number: 
 
 pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, naming_object_number: usize) -> isize {
     let cur_thread = scheduler().current_thread();
-    info!(" sharing naming cap: started");
+    // info!(" sharing naming cap: started");
     
     // Scope the first lock so it's dropped before we try to acquire the second one
     let shared_cap = 
         if let Some(sharer_cspace) = cur_thread.cspace.invoke(){
             if let Some(naming_cap) = sharer_cspace.get_naming_capability(naming_object_number) {
-                info!(" sharing naming cap: found naming cap in sharer cspace");
+                // info!(" sharing naming cap: found naming cap in sharer cspace");
                 if naming_cap.is_none() { warn!( "sharing naming cap: naming cap is none") }
                 let perms = naming_cap.get_permissions();
                 naming_cap.share(perms)
@@ -67,12 +67,12 @@ pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, naming_object_numb
     };
 
     if let Some(receiver_thread) = scheduler().thread(thread_id) {
-        info!(" sharing naming cap: found receiver thread");
+        // info!(" sharing naming cap: found receiver thread");
         if let Some(mut cspace) = receiver_thread.cspace.invoke() {
-            info!("     cspace found");
+            // info!("     cspace found");
             if let Some(ref cap) = shared_cap {
                 let receiver_handle = cspace.receive_naming_capability(shared_cap);
-                info!("     naming cap shared, receiver handle: {}", cspace.get_naming_capabilities_len());
+                // info!("     naming cap shared, receiver handle: {}", cspace.get_naming_capabilities_len());
                 return receiver_handle;
             }
         }

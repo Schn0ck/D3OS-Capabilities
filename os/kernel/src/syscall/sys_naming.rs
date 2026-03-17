@@ -51,7 +51,7 @@ pub extern "sysv64" fn sys_open(cap_handle: usize, flag_bits: usize) -> isize {
     if let Some(cap) = naming_cap {
         match api::open(flags, &cap) {
             Ok(cap) => {
-                info!("sys_open succeeded, storing new capability");
+                // info!("sys_open succeeded, storing new capability");
                     // Store the capability and return its handle
                 let handle = cspace.receive_open_naming_capability(Some(cap));
                 return handle;
@@ -211,7 +211,7 @@ pub unsafe extern "sysv64" fn sys_mkfifo(path: *const u8, flag_bits: usize, dir_
     match api::mkfifo(&*path, flags, &dir_cap) {
         Ok(new_cap) => {
             // Reacquire the lock to store the new capability
-            info!("mkfifo succeeded, storing new capability");
+            // info!("mkfifo succeeded, storing new capability");
             cspace.receive_naming_capability(Some(new_cap))
         }
         Err(errno) => {

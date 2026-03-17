@@ -33,7 +33,7 @@ pub struct CSpace{
     //... other capability types
 }
 
-impl CSpace{ //TODO shared CSpace between all threads in a process? It is implemented but keep it??
+impl CSpace{ 
     pub fn new() -> Self {
         let syscall_fns: [*const (); NUM_SYSCALLS] = [
             sys_terminal_read as *const (), //0
@@ -165,9 +165,9 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
 
     pub fn receive_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{
         if let Some(cap) = capability {
-            info!("     CSpace: Naming capability is none: {}", cap.is_none());
+            // info!("     CSpace: Naming capability is none: {}", cap.is_none());
             self.naming_capabilities.push(cap);
-            info!("     CSpace: Received naming capability, new length {}", self.naming_capabilities.len());
+            // info!("     CSpace: Received naming capability, new length {}", self.naming_capabilities.len());
             return self.naming_capabilities.len() as isize - 1; //panic if len > isize::MAX (9_223_372_036_854_775_808) --> practically impossible
         }
 
@@ -177,9 +177,9 @@ impl CSpace{ //TODO shared CSpace between all threads in a process? It is implem
 
     pub fn receive_open_naming_capability(&mut self, capability: Option<Capability<NamingObject>>) -> isize{
         if let Some(cap) = capability {
-            info!("     CSpace: Naming capability is none: {}", cap.is_none());
+            // info!("     CSpace: Naming capability is none: {}", cap.is_none());
             self.open_naming_capabilities.push(cap);
-            info!("     CSpace: Received naming capability, new length {}", self.open_naming_capabilities.len());
+            // info!("     CSpace: Received naming capability, new length {}", self.open_naming_capabilities.len());
             return self.open_naming_capabilities.len() as isize - 1; //panic if len > isize::MAX (9_223_372_036_854_775_808) --> practically impossible
         }
 
