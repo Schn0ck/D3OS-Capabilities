@@ -54,9 +54,12 @@ pub fn main() {
     sleep(1000);
     println!("Shared Capability with 3rd process");
     share_naming_object(12, pipe); // Assuming main thread has ID 12
-    
+
     loop {
-        let open_pipe = open(pipe, OpenOptions::READWRITE).unwrap();
+        let Ok(open_pipe) = open(pipe, OpenOptions::READWRITE) else {
+            println!("Process 2 cap revoked");
+            return;
+        };
         if write(open_pipe, "Process 2: Capability revoked, write should fail".as_ref()).is_ok(){
             sleep(5000);
             println!("Process 2, waiting for capability to be revoked");

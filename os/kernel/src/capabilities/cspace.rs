@@ -8,6 +8,7 @@ use log::{info, warn};
 use spin::Once;
 use naming::shared_types::OpenOptions;
 use syscall::NUM_SYSCALLS;
+use syscall::return_vals::Errno;
 use crate::capabilities::capability;
 use crate::capabilities::capability::{Capability, CapabilityFlags};
 use crate::capabilities::capability_objects::naming_object::{create_naming_capability, NamingObject};
@@ -233,33 +234,46 @@ impl CSpace{
     // }
     
     /// check if the object from the provided capability is stored and if it was shared by the provided capability, if yes then revoke the cap, otherwise do nothing
-    pub fn revoke_naming_capability(&mut self, cap: &Capability<NamingObject>) {
+    pub fn revoke_naming_capability(&mut self, cap: &Capability<NamingObject>) -> Result<isize, Errno>{
+        let mut handle = -1isize;
         let was_enabled = cpu::disable_int_nested();
         let mut capability_revoked = false;
 
         // Iterate through all naming capabilities and check for matches
-        for capability in self.naming_capabilities.iter_mut() {
-            if capability.points_to_same_object(cap) { //todo never true
+        for i in 0..self.naming_capabilities.len() {
+            let capability = &mut self.naming_capabilities[i];
+            info!(
+                "     CSpace: Checking naming capability {}, {}",
+                i,
+                capability.points_to_same_object(cap)
+            );
+            if capability.points_to_same_object(cap) {
                 if cap.was_shared_to(capability) {
+                    info!("                 shared");
+                    handle = i as isize;
                     capability.revoke();
                     capability_revoked = true;
+                } else {
+                    warn!("                 not shared");
                 }
             }
         }
 
         for capability in self.open_naming_capabilities.iter_mut() {
+            info!("     CSpace: Checking open naming capability for revoke, cap points to same object: {}", capability.points_to_same_object(cap));
             if capability.points_to_same_object(cap) {
-                if cap.was_shared_to(capability) {
-                    capability.revoke();
-                    capability_revoked = true;
-                }
+                warn!("                 open");
+                capability.revoke();
+                capability_revoked = true;
             }
         }
         cpu::enable_int_nested(was_enabled);
         if capability_revoked {
             info!("     CSpace: Successfully revoked matching naming capabilities");
+            Ok(handle)
         } else {
             warn!("     CSpace: Failed to revoke naming capability, no matching capability found");
+            Err(Errno::EUNKN)
         }
     }
 
@@ -298,6 +312,15 @@ impl CSpace{
             return 0isize;
         }
         -1
+    }
+    
+    pub(crate) fn cap_with_same_obj(&self, cap: &Capability<NamingObject>) -> Result<usize, Errno>{
+        for (i, capability) in self.naming_capabilities.iter().enumerate() {
+            if capability.points_to_same_object(cap) {
+                return Ok(i);
+            }
+        }
+        Err(Errno::EUNKN)
     }
     
 }

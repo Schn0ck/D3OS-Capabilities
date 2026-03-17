@@ -7,6 +7,8 @@ use bitflags::bitflags;
 use log::{error, info, warn};
 use pc_keyboard::KeyCode::Mute;
 use spin::{Mutex, MutexGuard};
+use crate::capabilities::capability_objects::naming_object::NamingObject;
+
 bitflags! {
     #[derive(Clone, Copy)]
     pub struct CapabilityFlags: u32 {
@@ -124,19 +126,16 @@ impl<T> Capability<T> {
 
     // New method to check if this capability was derived from another one
     pub fn was_shared_to(&self, other: &Capability<T>) -> bool {
-        self.shared_to.try_lock().unwrap().iter().any(|weak_cap| {
-            if let Some(shared_cap) = weak_cap.upgrade() {
-                Arc::ptr_eq(&shared_cap, &Arc::new(other.clone())) || //shared directly from this cap
-                    shared_cap.was_shared_to(other) //or shared from a cap that was shared from this cap
-            } else {
-                false
-            }
+        let Some(shared_to) = self.shared_to.try_lock() else {
+            warn!("Could not acquire lock on shared_to list.");
+            return false;
+        };
+
+        shared_to.iter().any(|weak_cap| {
+            weak_cap.as_ptr() == Arc::as_ptr(&Arc::new(other.clone()))
         })
     }
 
-
-
-    ///For combining capabilities referring to the same object, merging their permissions.
     pub(crate) fn combine(&self, other: &Capability<T>) -> Option<Capability<T>> {
         // Only allow combining if both capabilities refer to the same object
         if let Some(obj) = &self.obj {
@@ -159,8 +158,7 @@ impl<T> Capability<T> {
     
     pub(crate) fn points_to_same_object(&self, other: &Capability<T>) -> bool {
         if let (Some(obj), Some(other_obj)) = (&self.obj, &other.obj) {
-            info!("                 {:?}{:?}", Arc::<Mutex<T>>::as_ptr(obj), Arc::<Mutex<T>>::as_ptr(other_obj));
-            Arc::<Mutex<T>>::as_ptr(obj) == Arc::<Mutex<T>>::as_ptr(other_obj)
+            Arc::as_ptr(obj) == Arc::as_ptr(other_obj)
         } else {
             false
         }

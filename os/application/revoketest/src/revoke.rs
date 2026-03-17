@@ -34,7 +34,7 @@ fn revoke_thread() {
     // Revoke the capability
 
     revoke_naming_object(10, file); // Assuming main thread has ID 10
-
+    revoke_naming_object(12, file); // Assuming main thread has ID 10
     loop {
         
     }

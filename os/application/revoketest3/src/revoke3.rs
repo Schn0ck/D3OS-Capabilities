@@ -5,7 +5,7 @@ extern crate alloc;
 use alloc::string::String;
 use core::ptr::null;
 use concurrent::{process, thread};
-use naming::{mkfifo, open, read, write, ROOT};
+use naming::{close, mkfifo, open, read, write, ROOT};
 use naming::shared_types::OpenOptions;
 #[allow(unused_imports)]
 use runtime::*;
@@ -22,10 +22,10 @@ pub fn main() {
         sleep(100);
     }
 
-    let file = Capability::new(2); //Shared Cap at index 2
+    let pipe = Capability::new(2); //Shared Cap at index 2
     let mut buf = [0u8; 5];
 
-    let Ok(pipe) = open(file, OpenOptions::READWRITE) else {
+    let Ok(open_pipe) = open(pipe, OpenOptions::READWRITE) else {
         println!("Process 3: Failed to open shared pipe");
         return;
     };
@@ -77,10 +77,17 @@ pub fn main() {
     //     println!("{:?}", &buf)
     // }
 
-    while write(pipe, "Process 3: Capability revoked, write should fail".as_ref()).is_ok() {
-        sleep(500);
-        println!("Process 3, waiting for capability to be revoked");
+    loop {
+        let Ok(open_pipe) = open(pipe, OpenOptions::READWRITE) else { 
+            println!("Process 3 cap revoked");
+            return;
+        };
+        if write(open_pipe, "Process 3: Capability revoked, write should fail".as_ref()).is_ok(){
+            sleep(5000);
+            println!("Process 3, waiting for capability to be revoked");
+        } else {
+            println!("Process 3 cap revoked")
+        }
+        close(open_pipe);
     }
-
-    println!("Process 3 cap revoked")
 }

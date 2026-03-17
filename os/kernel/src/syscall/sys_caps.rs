@@ -92,45 +92,45 @@ pub extern "sysv64" fn sys_naming_len() -> usize {
 }
 
 ///revokes a shared naming capability from a thread's cspace completely
+/// To revoke from other threats and oneself: first revoke from all shares
 pub extern "sysv64" fn sys_revoke_naming_cap(thread_id: usize, naming_object_number: usize) -> isize {
+    info!("sys_revoke_naming_cap: called with thread_id {}, naming_object_number {}", thread_id, naming_object_number);
     let current_thread = scheduler().current_thread();
+    let current_process = scheduler().current_ids().0;
     let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
-    // First check if we have the capability to revoke
-    let Some(mut cap_to_check) = cspace.get_naming_capability_mut(naming_object_number) else { return -5 };
-
+    let Some(cap_to_revoke) = cspace.get_naming_capability_mut(naming_object_number) else { return -5 };
+    
     if thread_id == current_thread.id() {
-        let mut cap_to_revoke: &mut Capability<NamingObject> = cap_to_check;
-
-        cap_to_check.revoke();
-        return 0;
+        cap_to_revoke.revoke();
+        0
     } else {
-        if let Some(receiver_thread) = scheduler().thread(thread_id) {
-            let Some(mut cspace) = receiver_thread.cspace.invoke() else { return -5; };
-            let Some(cap_to_revoke) = cspace.get_naming_capability_mut(naming_object_number) else { return -5 };
-            let processes = process_manager().read().active_process_ids();
-
-            for i in processes { //go through all cspaces and look for shares -> revoke them
-                let process = process_manager().read().process(i);
-                let res = process.cspace.invoke();
-                match res {
-                    Some(mut cspace) => {
-                        cspace.revoke_naming_capability(cap_to_revoke);
-                    },
-                    None => {}//will fail to open current's process cspace. Ok as revoke from self not wanted here
-                }
-            }
-            
-            cap_to_revoke.revoke();
-            return 0;
-        }
+        let Some(revoke_thread) = scheduler().thread(thread_id) else { return -4; };
+        let Some(mut revoke_cspace) = revoke_thread.cspace.invoke() else { return -3; };
+        let Ok(cap_handle) = revoke_cspace.cap_with_same_obj(cap_to_revoke) else { return -2; };
+        let Some(cap_to_revoke) = revoke_cspace.get_naming_capability_mut(cap_handle) else { return -1; };
+        
+        // let processes = process_manager().read().active_process_ids();
+        // for i in processes { //go through all cspaces and look for shares -> revoke them
+        //     if i == current_process { continue; } //skip current process as revoke from self not wanted
+        //     let process = process_manager().read().process(i);
+        //     let res = process.cspace.invoke();
+        //     match res {
+        //         Some(mut cspace) => {
+        //             cspace.revoke_naming_capability(cap_to_revoke);
+        //         },
+        //         None => {}//will fail to open current's process cspace. Ok as revoke from self not wanted here
+        //     }
+        // }
+        if !cap_to_revoke.is_original() { cap_to_revoke.revoke();} //Revoke cap from other thread. originial can only be revoked from owner thread
+        0
     }
-    -5
 }
 
 ///revokes specific rights from a shared naming capability from a thread's cspace
 pub extern "sysv64" fn sys_revoke_naming_rights(thread_id: usize, naming_object_number: usize, rights: usize) -> isize {
     let rights_to_revoke = CapabilityFlags::from_bits(rights as u32).unwrap_or_else(|| { CapabilityFlags::empty() });
     let current_thread = scheduler().current_thread();
+    let current_process = scheduler().current_ids().0;
     let Some(mut cspace) = current_thread.cspace.invoke() else { return -5 };
     let Some(cap) =  cspace.get_naming_capability(naming_object_number) else { return -5 };
 
@@ -139,6 +139,7 @@ pub extern "sysv64" fn sys_revoke_naming_rights(thread_id: usize, naming_object_
     let processes = process_manager().read().active_process_ids();
 
     for i in processes{ //go through all cspaces and look for shares -> revoke rights
+        if i == current_process { continue; } //skip current process as revoke from self not wanted
         let process = process_manager().read().process(i);
         let res = process.cspace.invoke();
         match res {
