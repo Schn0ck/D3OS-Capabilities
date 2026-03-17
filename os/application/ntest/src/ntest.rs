@@ -7,9 +7,11 @@ use naming::shared_types::{OpenOptions, SeekOrigin};
 #[allow(unused_imports)]
 use runtime::*;
 use terminal::{print, println};
+use time::systime;
 
 #[unsafe(no_mangle)]
 pub fn main() {
+    let start_time = systime();
     println!("naming test: start");
     
     // opening file
@@ -82,4 +84,6 @@ pub fn main() {
     //thus leak information about other processes' files
 
     println!("naming test: end");
+    let end_time = systime();
+    println!("time elapsed: {} ms", (end_time - start_time));
 }

@@ -42,5 +42,5 @@ pub fn create_naming_capability(object: NamedObject, rights: OpenOptions, path: 
         flags |= CapabilityFlags::SHARE;
     }
 
-    Capability::new(NamingObject::new(object, rights, path), flags) //Todo make it customizable
+    Capability::new(NamingObject::new(object, rights, path), flags)
 }

@@ -85,7 +85,8 @@ pub fn touch(path: &str, flags: OpenOptions, dir_handle: Capability) -> Result<C
     }
 }
 
-pub fn readdir(fh: Capability) -> Result<Option<DirEntry>, Errno> { //todo check
+pub fn readdir(fh: Capability) -> Result<Option<DirEntry>, Errno> { 
+    return Err(Errno::ENOTSUP);
     let mut raw_dirent = RawDirent::new();
     let ret = syscall(SystemCall::Readdir, &[
         fh.handle(),
@@ -127,7 +128,8 @@ impl DirEntry {
     }
 }
 
-pub fn cwd() -> Result<String, Errno> { //todo check how that works with current system
+pub fn cwd() -> Result<String, Errno> { 
+    return Err(Errno::ENOTSUP);
     let buf: [u8; 512] = [0; 512]; // buffer for the path
     let result = syscall(SystemCall::Cwd, &[ buf.as_ptr() as usize, buf.len(), ]);
     match result {
@@ -144,7 +146,8 @@ pub fn cwd() -> Result<String, Errno> { //todo check how that works with current
     }
 }
 
-pub fn cd(path: &str) -> Result<usize, Errno> { //todo check how that works with current system
+pub fn cd(path: &str) -> Result<usize, Errno> { 
+    return Err(Errno::ENOTSUP);
     match CString::new(path) {
         Ok(c_path) => syscall(SystemCall::Cd, &[c_path.as_bytes().as_ptr() as usize]),
         Err(_) => Err(Errno::EBADSTR),

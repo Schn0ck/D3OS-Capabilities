@@ -10,7 +10,7 @@ pub fn share_syscall(thread_id: usize, syscall_num: usize) -> bool{
     let res = syscall(SystemCall::ShareSyscallCap, &[thread_id, syscall_num]);
     match res {
         Ok(b) => b == 0,
-        Err(_) => panic!("Syscall: Share Syscall Cap failed."), //TODO: no panic necessary if no permissions
+        Err(_) => false, 
     }
 }
 pub fn revoke(thread_id: usize, syscall_num: usize) -> isize{
@@ -23,8 +23,8 @@ pub fn revoke(thread_id: usize, syscall_num: usize) -> isize{
         },
     }
 }
-pub fn share_naming_object(thread_id: usize, cap: Capability) -> isize{ //todo dont share which handle -> tells caller how many caps
-    let res = syscall(SystemCall::ShareNamingCap, &[thread_id, cap.handle()]);
+pub fn share_naming_object(thread_id: usize, rights: OpenOptions, cap: Capability) -> isize{ 
+    let res = syscall(SystemCall::ShareNamingCap, &[thread_id, rights.bits,cap.handle()]);
     match res {
         Ok(b) => b as isize,
         Err(e) => {

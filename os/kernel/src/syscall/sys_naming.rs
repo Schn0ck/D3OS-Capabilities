@@ -66,7 +66,6 @@ pub extern "sysv64" fn sys_open(cap_handle: usize, flag_bits: usize) -> isize {
     }
     
     Errno::EUNKN as isize //Return EUNKN so that client doesnt know if it failed or if it existed
-    //todo make it so that this always takes x seconds to avoid timing attacks. e.g. by sleeping for remaining time
 }
 
 
@@ -243,18 +242,16 @@ pub(super) unsafe fn ptr_to_string(ptr: *const u8) -> Result<String, Errno> {
 }
 
 pub unsafe extern "sysv64" fn sys_readdir(cap_handle: usize, buffer: *mut u8, buffer_length: usize) -> isize {
-    if buffer.is_null() || buffer_length == 0 || buffer_length <  size_of::<RawDirent>() {
-        return Errno::EINVAL as isize;
-    }
-    let current_thread = scheduler().current_thread();
-    let mut cspace = current_thread.cspace.invoke().unwrap();
-    let Some(dir_cap)= cspace.get_naming_capability(cap_handle) else { return Errno::EACCES as isize };
-    
-    let path = dir_cap.invoke().unwrap().path.clone();
+    // if buffer.is_null() || buffer_length == 0 || buffer_length <  size_of::<RawDirent>() {
+    //     return Errno::EINVAL as isize;
+    // }
+    // let current_thread = scheduler().current_thread();
+    // let mut cspace = current_thread.cspace.invoke().unwrap();
+    // let Some(dir_cap)= cspace.get_naming_capability(cap_handle) else { return Errno::EACCES as isize };
+    // 
+    // let path = dir_cap.invoke().unwrap().path.clone();
 
-    //todo lookup all current caps at that path and return them one by one on each call to readdir. If there are no more caps, return 0
-    
-    Errno::EACCES as isize
+    Errno::EACCES as isize //Not implemented. Security risk. Should only read files from stored capabilities
 }
 
 

@@ -7,7 +7,7 @@ use crate::capabilities::capability_objects::naming_object::NamingObject;
 /**
 Share cap with same permissions
  */
-pub extern "sysv64" fn sys_share_syscall_cap(thread_id: usize, syscall_number: usize) -> isize { //TODO handle the same way as share naming cap
+pub extern "sysv64" fn sys_share_syscall_cap(thread_id: usize, syscall_number: usize) -> isize { 
     let cur_thread = scheduler().current_thread();
     let shared_cap =
         if let Some(sharer_cspace) = cur_thread.cspace.invoke(){
@@ -45,7 +45,8 @@ pub extern "sysv64" fn sys_revoke_syscall_cap(thread_id: usize, syscall_number: 
     -5
 }
 
-pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, naming_object_number: usize) -> isize {
+pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, rights: usize, naming_object_number: usize) -> isize {
+    let rights = CapabilityFlags::from_bits(rights as u32).unwrap_or_else(|| { CapabilityFlags::empty() });
     let cur_thread = scheduler().current_thread();
     // info!(" sharing naming cap: started");
     
@@ -55,7 +56,7 @@ pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, naming_object_numb
             if let Some(naming_cap) = sharer_cspace.get_naming_capability(naming_object_number) {
                 // info!(" sharing naming cap: found naming cap in sharer cspace");
                 if naming_cap.is_none() { warn!( "sharing naming cap: naming cap is none") }
-                let perms = naming_cap.get_permissions();
+                let perms = naming_cap.get_permissions().intersection(rights);
                 naming_cap.share(perms)
             } else {
                 error!(" sharing naming cap: naming cap not found in sharer cspace");

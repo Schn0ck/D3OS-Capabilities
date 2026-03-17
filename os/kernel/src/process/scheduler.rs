@@ -151,7 +151,7 @@ impl Scheduler {
             return Some(thread);
         }
 
-        None //TODO check if the lock is always dropped
+        None
     }
 
     /// Return (pid, tid) of current thread
@@ -164,7 +164,6 @@ impl Scheduler {
 
     /// Start the scheduler, called only once from `boot.rs`
     pub fn start(&self) {
-        // TODO: make sure this is actually called just once
         let mut state = self.get_ready_state();
         state.current_thread = state.ready_queue.pop_back();
 

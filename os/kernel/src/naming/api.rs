@@ -112,7 +112,7 @@ pub fn open(flags: OpenOptions, file_cap: &Capability<NamingObject>) -> Result<C
     };
 
     // Handle pipes differently from files
-    match open_objects::open(&naming_obj.path, flags) { //todo adds / to path which is a problem for directory capabilities
+    match open_objects::open(&naming_obj.path, flags) {
         Ok(obj) => {
             // info!("opened object at path: {}, returning OK", &naming_obj.path);
             Ok(create_naming_capability(obj, flags, naming_obj.path.to_string()))
@@ -243,7 +243,6 @@ pub fn close(cap: &Capability<NamingObject>) -> Result<usize, Errno> {
     }
 }
 /// Create a directory named 'name' in the directory given by the capability object. \
-/// TODO But only if it doesn't already exist
 /// Returns `Ok(Capability<NamingObject>)` or `Err(errno)`
 pub fn mkdir(name: &str, flags: OpenOptions, parent_dir: &Capability<NamingObject>) -> Result<Capability<NamingObject>, Errno> {
     // Check rights of parent cap
@@ -327,7 +326,7 @@ pub fn touch(name: &str, flags: OpenOptions, dir_cap: &Capability<NamingObject>)
 ///   `Ok(0)` no more entries in the directory \
 ///   `Err`   error code
 pub fn readdir(dir_handle: usize, dentry: Option<&mut RawDirent>) -> Result<usize, Errno> {
-    todo!();
+    return Err(Errno::ENOTSUP);
     let res = open_objects::readdir(dir_handle);
     match res {
         Ok(dir_entry) => {
@@ -358,8 +357,7 @@ pub fn readdir(dir_handle: usize, dentry: Option<&mut RawDirent>) -> Result<usiz
 /// Get the current working directory and return path in `buffer`. \
 /// Return: `Ok(len of string)` or `Err(errno)`
 pub fn cwd(buffer: &mut [u8]) -> Result<usize, Errno> {
-    //TODO check if it only returns path and if that is a sec leakage
-    // Lock the CWD mutex to access its value
+    return Err(Errno::ENOTSUP);
     let cwd = CWD.lock();
 
     // Get the string as bytes
@@ -386,7 +384,7 @@ pub fn cwd(buffer: &mut [u8]) -> Result<usize, Errno> {
 /// Return: `Ok(0)` or `Err(errno)`
 ///
 pub fn cd(path: &String) -> Result<usize, Errno> {
-    //TODO check security
+    return Err(Errno::ENOTSUP);
     let result = lookup::lookup_dir(path);
     match result {
         Ok(_) => {

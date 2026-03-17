@@ -16,5 +16,6 @@ bench = false
 terminal = { path = "../../library/terminal" }
 runtime = { path = "../../library/runtime" }
 naming = { path = "../../library/naming" }
+time = { path = "../../library/time" }
 concurrent = { path = "../../library/concurrent" }
 capabilities = { path = "../../library/capabilities" }

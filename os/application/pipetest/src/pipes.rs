@@ -151,7 +151,7 @@ pub fn main() {
     if let Some(w) = writer {
 
         println!("Starting writer, id {}", w.id());
-        let num = share_naming_object(w.id(), pipe_cap); //TODO share cap with custom rights (e.g. readonly on a readwrite cap)
+        let num = share_naming_object(w.id(), pipe_cap);
         if num < 0 {
             println!("Failed to share pipe cap with writer thread (id {})", w.id());
             return;

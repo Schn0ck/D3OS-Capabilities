@@ -225,7 +225,7 @@ pub unsafe extern "C" fn lcd_draw_line(_gb: *mut c_void, pixels: *const u8, line
 
 /// Read the ROM file from the specified path and load it into the `ROM` buffer.
 fn read_rom(path: &str) {
-    todo!("implement cap handling");
+    return;
     let file = naming::open(&path, OpenOptions::READONLY, ROOT).expect("Failed to open ROM file");
     let file_size = naming::seek(file, 0, SeekOrigin::End).expect("Failed to get ROM file size");
     naming::seek(file, 0, SeekOrigin::Start).expect("Failed to get ROM file offset");

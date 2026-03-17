@@ -15,7 +15,6 @@ use crate::{efi_services_available, timer};
 
 
 pub extern "sysv64" fn sys_get_system_time() -> isize {
-    return -5;
     timer().systime_ms() as isize
 }
 
