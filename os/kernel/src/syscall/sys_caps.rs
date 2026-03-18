@@ -1,5 +1,6 @@
 use core::arch::asm;
 use log::{error, info, warn};
+use naming::shared_types::OpenOptions;
 use crate::capabilities::capability::{Capability, CapabilityFlags};
 use crate::{process_manager, scheduler, PROCESS_MANAGER};
 use crate::capabilities::capability_objects::naming_object::NamingObject;
@@ -7,7 +8,7 @@ use crate::capabilities::capability_objects::naming_object::NamingObject;
 /**
 Share cap with same permissions
  */
-pub extern "sysv64" fn sys_share_syscall_cap(thread_id: usize, syscall_number: usize) -> isize { 
+pub extern "sysv64" fn sys_share_syscall_cap(thread_id: usize, syscall_number: usize) -> isize {
     let cur_thread = scheduler().current_thread();
     let shared_cap =
         if let Some(sharer_cspace) = cur_thread.cspace.invoke(){
@@ -46,7 +47,25 @@ pub extern "sysv64" fn sys_revoke_syscall_cap(thread_id: usize, syscall_number: 
 }
 
 pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, rights: usize, naming_object_number: usize) -> isize {
-    let rights = CapabilityFlags::from_bits(rights as u32).unwrap_or_else(|| { CapabilityFlags::empty() });
+    let rights = OpenOptions::from_bits(rights).unwrap_or_else(|| { OpenOptions::empty() });
+    let flags = { 
+        let mut flags = CapabilityFlags::empty();
+        if rights.contains(OpenOptions::READONLY) || rights.contains(OpenOptions::READWRITE) {
+            flags |= CapabilityFlags::READ;
+        }
+        if rights.contains(OpenOptions::WRITEONLY) || rights.contains(OpenOptions::READWRITE) {
+            flags |= CapabilityFlags::WRITE;
+        }
+        if rights.contains(OpenOptions::CREATE) {
+            flags |= CapabilityFlags::EXECUTE;
+        }
+        if rights.contains(OpenOptions::SHARE) {
+            flags |= CapabilityFlags::SHARE;
+        }
+        flags
+    };
+    
+    info!( "sys_share_naming_cap: called with thread_id {}, rights {}, naming_object_number {}", thread_id, rights.bits(), naming_object_number);
     let cur_thread = scheduler().current_thread();
     // info!(" sharing naming cap: started");
     
@@ -56,7 +75,7 @@ pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, rights: usize, nam
             if let Some(naming_cap) = sharer_cspace.get_naming_capability(naming_object_number) {
                 // info!(" sharing naming cap: found naming cap in sharer cspace");
                 if naming_cap.is_none() { warn!( "sharing naming cap: naming cap is none") }
-                let perms = naming_cap.get_permissions().intersection(rights);
+                let perms = naming_cap.get_permissions().intersection(flags);
                 naming_cap.share(perms)
             } else {
                 error!(" sharing naming cap: naming cap not found in sharer cspace");

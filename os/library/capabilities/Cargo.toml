@@ -2,9 +2,15 @@
 edition = "2024"
 name = "capabilities"
 version = "0.1.0"
-authors = ["Julian Schnock <julian.schnock@hhu.de>"]
+authors = ["Michael Schöttner <michael.schoettner@hhu.de>, Fabian Ruhland <ruhland@hhu.de>"]
+
+[lib]
+test = false
+doctest = false
+bench = false
 
 [dependencies]
-# External depencies
+# Local dependencies
 syscall = { path = "../syscall" }
 terminal = { path = "../terminal" }
+naming = { path = "../naming" }

@@ -6,13 +6,12 @@ use alloc::string::String;
 use core::ptr::null;
 use concurrent::{process, thread};
 use naming::{close, mkfifo, open, read, write, ROOT};
-use naming::shared_types::OpenOptions;
+use naming::shared_types::{Capability, OpenOptions};
 #[allow(unused_imports)]
 use runtime::*;
 use terminal::{print, println};
 use terminal::write::print;
 use capabilities::{get_naming_len, revoke_naming_object, share_naming_object};
-use capabilities::capability::Capability;
 use concurrent::process::Process;
 use concurrent::thread::{sleep, Thread, current};
 #[unsafe(no_mangle)]

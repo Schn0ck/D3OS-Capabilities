@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-use naming::shared_types::OpenOptions;
+use naming::shared_types::{OpenOptions, Capability};
 use naming::{mkfifo, open, read, write, ROOT, SHARED_PIPE};
 
 use concurrent::thread;
@@ -10,7 +10,6 @@ use concurrent::thread;
 use runtime::*;
 use terminal::{print, println};
 use capabilities::*;
-use capabilities::capability::Capability;
 use concurrent::thread::{current, sleep};
 use terminal::write::print;
 
@@ -151,7 +150,7 @@ pub fn main() {
     if let Some(w) = writer {
 
         println!("Starting writer, id {}", w.id());
-        let num = share_naming_object(w.id(), pipe_cap);
+        let num = share_naming_object(w.id(), OpenOptions::all(), pipe_cap);
         if num < 0 {
             println!("Failed to share pipe cap with writer thread (id {})", w.id());
             return;
@@ -171,7 +170,7 @@ pub fn main() {
     });
     
     if let Some(r) = reader {
-        let num = share_naming_object(r.id(),pipe_cap);
+        let num = share_naming_object(r.id(), OpenOptions::all(), pipe_cap);
         let buff= [num as u8];
         let res = write(SHARED_PIPE, &buff);
         r.join();

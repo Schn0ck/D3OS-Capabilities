@@ -1,10 +1,9 @@
 #![no_std]
-pub mod capability;
 
 use syscall::{syscall, SystemCall};
 use core::result::Result::{Err, Ok};
 use terminal::{print, println};
-use crate::capability::Capability;
+use naming::shared_types::{Capability, OpenOptions};
 
 pub fn share_syscall(thread_id: usize, syscall_num: usize) -> bool{
     let res = syscall(SystemCall::ShareSyscallCap, &[thread_id, syscall_num]);
@@ -24,7 +23,7 @@ pub fn revoke(thread_id: usize, syscall_num: usize) -> isize{
     }
 }
 pub fn share_naming_object(thread_id: usize, rights: OpenOptions, cap: Capability) -> isize{ 
-    let res = syscall(SystemCall::ShareNamingCap, &[thread_id, rights.bits,cap.handle()]);
+    let res = syscall(SystemCall::ShareNamingCap, &[thread_id, rights.bits(), cap.handle()]);
     match res {
         Ok(b) => b as isize,
         Err(e) => {
