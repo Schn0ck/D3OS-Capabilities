@@ -3,8 +3,7 @@ extern crate alloc;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use capabilities::capability::Capability;
-use naming::shared_types::OpenOptions;
+use naming::shared_types::{OpenOptions, Capability};
 use naming::{mkfifo, open, read, write, ROOT};
 use naming::{SHARED_PIPE};
 use capabilities::share_naming_object;
@@ -47,7 +46,7 @@ impl FileClient {
 
         sleep(10000); //Wait to be sure the server thread is initialized
 
-        share_naming_object(thread_id[0].clone() as usize, pipe); //share client pipe with server
+        share_naming_object(thread_id[0].clone() as usize, OpenOptions::all(), pipe); //share client pipe with server
 
         sleep(1000); //wait for server to process the shared pipe
 

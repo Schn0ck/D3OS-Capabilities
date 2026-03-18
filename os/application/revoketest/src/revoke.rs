@@ -6,13 +6,12 @@ use alloc::vec::Vec;
 use core::ptr::null;
 use concurrent::{process, thread};
 use naming::{mkfifo, open, read, write, ROOT, SHARED_PIPE};
-use naming::shared_types::OpenOptions;
+use naming::shared_types::{OpenOptions, Capability};
 #[allow(unused_imports)]
 use runtime::*;
 use terminal::{print, println};
 use terminal::write::print;
 use capabilities::{revoke_naming_object, share_naming_object};
-use capabilities::capability::Capability;
 use concurrent::thread::{current, sleep, Thread};
 
 fn revoke_thread() {
@@ -22,7 +21,7 @@ fn revoke_thread() {
     };
 
     sleep(1000);
-    share_naming_object(10, file); // Assuming main thread has ID 10
+    share_naming_object(10, OpenOptions::all(), file); // Assuming main thread has ID 10
     // 
     // // Try to use the capability before it's revoked
     // // let mut buf = [0u8];

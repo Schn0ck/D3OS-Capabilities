@@ -9,11 +9,10 @@ use alloc::vec::Vec;
 use core::result::Result::Ok;
 use core::result::Result;
 use core::option::Option::*;
-use capabilities::capability::Capability;
 use concurrent::thread;
 use concurrent::thread::{create, sleep};
 use naming::{mkfifo, open, read, write, ROOT, SHARED_PIPE};
-use naming::shared_types::OpenOptions;
+use naming::shared_types::{OpenOptions, Capability};
 use syscall::return_vals::Errno;
 
 #[allow(unused_imports)]
