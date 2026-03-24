@@ -5,9 +5,8 @@ use crate::capabilities::capability::{Capability, CapabilityFlags};
 use crate::{process_manager, scheduler, PROCESS_MANAGER};
 use crate::capabilities::capability_objects::naming_object::NamingObject;
 
-/**
-Share cap with same permissions
- */
+
+///Share cap with same permissions
 pub extern "sysv64" fn sys_share_syscall_cap(thread_id: usize, syscall_number: usize) -> isize {
     let cur_thread = scheduler().current_thread();
     let shared_cap =
@@ -46,6 +45,7 @@ pub extern "sysv64" fn sys_revoke_syscall_cap(thread_id: usize, syscall_number: 
     -5
 }
 
+///shares a naming capability with another thread's cspace
 pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, rights: usize, naming_object_number: usize) -> isize {
     let rights = OpenOptions::from_bits(rights).unwrap_or_else(|| { OpenOptions::empty() });
     let flags = { 
@@ -102,6 +102,7 @@ pub extern "sysv64" fn sys_share_naming_cap(thread_id: usize, rights: usize, nam
     -1
 }
 
+///returns the number of shared naming capabilities in the current thread's cspace
 pub extern "sysv64" fn sys_naming_len() -> usize {
     let cur_thread = scheduler().current_thread();
     if let Some(cspace) = cur_thread.cspace.invoke(){
